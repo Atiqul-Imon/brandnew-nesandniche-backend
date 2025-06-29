@@ -4,13 +4,13 @@ const blogSchema = new mongoose.Schema({
   title: {
     en: {
       type: String,
-      required: [true, 'English title is required'],
+      required: false,
       trim: true,
       maxlength: [200, 'English title cannot exceed 200 characters']
     },
     bn: {
       type: String,
-      required: [true, 'Bangla title is required'],
+      required: false,
       trim: true,
       maxlength: [200, 'Bangla title cannot exceed 200 characters']
     }
@@ -18,43 +18,45 @@ const blogSchema = new mongoose.Schema({
   content: {
     en: {
       type: String,
-      required: [true, 'English content is required'],
+      required: false,
       minlength: [50, 'English content must be at least 50 characters long']
     },
     bn: {
       type: String,
-      required: [true, 'Bangla content is required'],
+      required: false,
       minlength: [50, 'Bangla content must be at least 50 characters long']
     }
   },
   excerpt: {
     en: {
       type: String,
-      required: [true, 'English excerpt is required'],
+      required: false,
       maxlength: [300, 'English excerpt cannot exceed 300 characters']
     },
     bn: {
       type: String,
-      required: [true, 'Bangla excerpt is required'],
+      required: false,
       maxlength: [300, 'Bangla excerpt cannot exceed 300 characters']
     }
   },
   slug: {
     en: {
       type: String,
-      required: [true, 'English slug is required'],
+      required: false,
       unique: true,
+      sparse: true,
       lowercase: true,
       trim: true,
       match: [/^[a-z0-9-]+$/, 'English slug can only contain lowercase letters, numbers, and hyphens']
     },
     bn: {
       type: String,
-      required: [true, 'Bangla slug is required'],
+      required: false,
       unique: true,
+      sparse: true,
       lowercase: true,
       trim: true,
-      match: [/^[a-z0-9-]+$/, 'Bangla slug can only contain lowercase letters, numbers, and hyphens']
+      match: [/^[\u0980-\u09FFa-z0-9-]+$/, 'Bangla slug can only contain Bangla letters, English letters, numbers, and hyphens']
     }
   },
   author: {
@@ -65,12 +67,12 @@ const blogSchema = new mongoose.Schema({
   category: {
     en: {
       type: String,
-      required: [true, 'English category is required'],
+      required: false,
       trim: true
     },
     bn: {
       type: String,
-      required: [true, 'Bangla category is required'],
+      required: false,
       trim: true
     }
   },
@@ -131,13 +133,24 @@ const blogSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Custom validation to ensure at least one language is provided
+blogSchema.pre('validate', function(next) {
+  const hasEnglish = this.title?.en && this.content?.en && this.excerpt?.en && this.slug?.en && this.category?.en;
+  const hasBengali = this.title?.bn && this.content?.bn && this.excerpt?.bn && this.slug?.bn && this.category?.bn;
+  
+  if (!hasEnglish && !hasBengali) {
+    return next(new Error('At least one language (English or Bengali) must be provided with all required fields'));
+  }
+  
+  next();
+});
+
 // Indexes for better performance
 blogSchema.index({ status: 1, publishedAt: -1 });
 blogSchema.index({ author: 1 });
 blogSchema.index({ 'category.en': 1 });
 blogSchema.index({ 'category.bn': 1 });
 blogSchema.index({ isFeatured: 1, publishedAt: -1 });
-// Note: slug.en and slug.bn indexes are automatically created by unique: true
 
 // Virtual for formatted published date
 blogSchema.virtual('formattedPublishedAt').get(function() {
@@ -163,7 +176,12 @@ blogSchema.methods.incrementViewCount = async function() {
 blogSchema.statics.getPublishedByLanguage = function(language, limit = 10, skip = 0) {
   return this.find({
     status: 'published',
-    publishedAt: { $lte: new Date() }
+    publishedAt: { $lte: new Date() },
+    [`title.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`content.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`excerpt.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`slug.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`category.${language}`]: { $exists: true, $ne: null, $ne: '' }
   })
   .select(`title.${language} content.${language} excerpt.${language} slug.${language} category.${language} featuredImage publishedAt readTime.${language} viewCount author`)
   .populate('author', 'name')
@@ -177,7 +195,12 @@ blogSchema.statics.getFeaturedByLanguage = function(language, limit = 5) {
   return this.find({
     status: 'published',
     isFeatured: true,
-    publishedAt: { $lte: new Date() }
+    publishedAt: { $lte: new Date() },
+    [`title.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`content.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`excerpt.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`slug.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`category.${language}`]: { $exists: true, $ne: null, $ne: '' }
   })
   .select(`title.${language} content.${language} excerpt.${language} slug.${language} category.${language} featuredImage publishedAt readTime.${language} viewCount author`)
   .populate('author', 'name')

@@ -1,5 +1,17 @@
 import cloudinary from '../config/cloudinary.js';
 import logger from '../utils/logger.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 export const uploadImage = async (req, res) => {
   try {
@@ -10,40 +22,124 @@ export const uploadImage = async (req, res) => {
       });
     }
 
-    // Convert buffer to base64
-    const b64 = Buffer.from(req.file.buffer).toString('base64');
-    const dataURI = `data:${req.file.mimetype};base64,${b64}`;
-
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(dataURI, {
-      folder: 'blog-images',
-      resource_type: 'auto',
-      transformation: [
-        { width: 1200, height: 800, crop: 'fill', quality: 'auto' },
-        { fetch_format: 'auto' }
-      ]
-    });
-
-    logger.info('Image uploaded successfully', {
-      publicId: result.public_id,
-      url: result.secure_url,
+    logger.info('Upload request received', {
+      filename: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
       userId: req.user?.userId
     });
 
-    res.status(200).json({
-      success: true,
-      data: {
-        url: result.secure_url,
-        publicId: result.public_id,
-        width: result.width,
-        height: result.height,
-        format: result.format
-      }
+    // Check if Cloudinary is configured
+    const isCloudinaryConfigured = process.env.CLOUDINARY_CLOUD_NAME && 
+                                  process.env.CLOUDINARY_API_KEY && 
+                                  process.env.CLOUDINARY_API_SECRET;
+
+    logger.info('Cloudinary configuration check', {
+      hasCloudName: !!process.env.CLOUDINARY_CLOUD_NAME,
+      hasApiKey: !!process.env.CLOUDINARY_API_KEY,
+      hasApiSecret: !!process.env.CLOUDINARY_API_SECRET,
+      isConfigured: isCloudinaryConfigured
     });
+
+    if (isCloudinaryConfigured) {
+      try {
+        // Upload to Cloudinary
+        const b64 = Buffer.from(req.file.buffer).toString('base64');
+        const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+
+        logger.info('Attempting Cloudinary upload...');
+
+        const result = await cloudinary.uploader.upload(dataURI, {
+          folder: 'blog-images',
+          resource_type: 'auto',
+          transformation: [
+            { width: 1200, height: 800, crop: 'fill', quality: 'auto' },
+            { fetch_format: 'auto' }
+          ]
+        });
+
+        logger.info('Image uploaded to Cloudinary successfully', {
+          publicId: result.public_id,
+          url: result.secure_url,
+          userId: req.user?.userId
+        });
+
+        res.status(200).json({
+          success: true,
+          data: {
+            url: result.secure_url,
+            publicId: result.public_id,
+            width: result.width,
+            height: result.height,
+            format: result.format
+          }
+        });
+      } catch (cloudinaryError) {
+        logger.error('Cloudinary upload failed, falling back to local storage', {
+          error: cloudinaryError.message,
+          userId: req.user?.userId
+        });
+        
+        // Fallback to local storage if Cloudinary fails
+        const timestamp = Date.now();
+        const filename = `${timestamp}-${req.file.originalname}`;
+        const filepath = path.join(uploadsDir, filename);
+        
+        fs.writeFileSync(filepath, req.file.buffer);
+        
+        // Create a URL for the local file
+        const localUrl = `http://localhost:5000/uploads/${filename}`;
+        
+        logger.info('Image saved locally as fallback', {
+          filename,
+          url: localUrl,
+          userId: req.user?.userId
+        });
+
+        res.status(200).json({
+          success: true,
+          data: {
+            url: localUrl,
+            publicId: filename,
+            width: null,
+            height: null,
+            format: req.file.mimetype.split('/')[1]
+          }
+        });
+      }
+    } else {
+      // Fallback: Save locally
+      const timestamp = Date.now();
+      const filename = `${timestamp}-${req.file.originalname}`;
+      const filepath = path.join(uploadsDir, filename);
+      
+      fs.writeFileSync(filepath, req.file.buffer);
+      
+      // Create a URL for the local file
+      const localUrl = `http://localhost:5000/uploads/${filename}`;
+      
+      logger.info('Image saved locally successfully', {
+        filename,
+        url: localUrl,
+        userId: req.user?.userId
+      });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          url: localUrl,
+          publicId: filename,
+          width: null,
+          height: null,
+          format: req.file.mimetype.split('/')[1]
+        }
+      });
+    }
 
   } catch (error) {
     logger.error('Image upload failed', {
       error: error.message,
+      stack: error.stack,
       userId: req.user?.userId
     });
 

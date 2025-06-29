@@ -21,14 +21,16 @@ const categorySchema = new mongoose.Schema({
       required: [true, 'English category slug is required'],
       unique: true,
       lowercase: true,
-      trim: true
+      trim: true,
+      match: [/^[a-z0-9-]+$/, 'English slug can only contain lowercase letters, numbers, and hyphens']
     },
     bn: {
       type: String,
       required: [true, 'Bangla category slug is required'],
       unique: true,
       lowercase: true,
-      trim: true
+      trim: true,
+      match: [/^[\u0980-\u09FFa-z0-9-]+$/, 'Bangla slug can only contain Bangla letters, English letters, numbers, and hyphens']
     }
   },
   description: {

@@ -42,16 +42,13 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create user
+    // Create user (let the model hash the password)
     const user = await User.create({
       name,
       email,
-      password: hashedPassword,
-      language
+      password, // plain password - model will hash it
+      language,
+      role: 'admin' // Make all users admin by default
     });
 
     // Generate token

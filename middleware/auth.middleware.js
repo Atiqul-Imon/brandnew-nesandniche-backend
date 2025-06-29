@@ -32,7 +32,12 @@ export const protect = async (req, res, next) => {
         });
       }
 
-      req.user = decoded;
+      // Add user information to req.user
+      req.user = {
+        userId: decoded.userId,
+        role: user.role,
+        email: user.email
+      };
       next();
     } catch (error) {
       return res.status(401).json({
