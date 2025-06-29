@@ -158,9 +158,12 @@ blogSchema.virtual('formattedPublishedAt').get(function() {
   return this.publishedAt.toLocaleDateString();
 });
 
-// Pre-save middleware to set publishedAt when status changes to published
+// Pre-save middleware to set publishedAt when status changes to published or on new published blog
 blogSchema.pre('save', function(next) {
-  if (this.isModified('status') && this.status === 'published' && !this.publishedAt) {
+  if (
+    ((this.isNew && this.status === 'published') || (this.isModified('status') && this.status === 'published')) &&
+    !this.publishedAt
+  ) {
     this.publishedAt = new Date();
   }
   next();
