@@ -128,6 +128,12 @@ export const createBlog = asyncHandler(async (req, res) => {
     const readTimeEn = content?.en ? Math.ceil(content.en.split(' ').length / 200) : null;
     const readTimeBn = content?.bn ? Math.ceil(content.bn.split(' ').length / 200) : null;
 
+    // --- Robust publishedAt logic ---
+    let publishedAt = req.body.publishedAt;
+    if (status === 'published' && !publishedAt) {
+      publishedAt = new Date();
+    }
+
     const blogData = {
       title,
       content,
@@ -144,7 +150,8 @@ export const createBlog = asyncHandler(async (req, res) => {
       },
       seoTitle,
       seoDescription,
-      seoKeywords
+      seoKeywords,
+      publishedAt
     };
 
     const blog = await Blog.create(blogData);
@@ -451,6 +458,15 @@ export const updateBlog = asyncHandler(async (req, res) => {
         ? Math.ceil(req.body.content.bn.split(' ').length / 200)
         : null;
       req.body.readTime = { en: readTimeEn, bn: readTimeBn };
+    }
+
+    // --- Robust publishedAt logic for update ---
+    if (
+      req.body.status === 'published' &&
+      blog.status !== 'published' &&
+      !req.body.publishedAt
+    ) {
+      req.body.publishedAt = new Date();
     }
 
     const updatedBlog = await Blog.findByIdAndUpdate(
