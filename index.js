@@ -33,7 +33,8 @@ connectDB();
 app.use(cors({
   origin: [
     'https://www.newsandniche.com',
-    'https://newsandniche.com'
+    'https://newsandniche.com',
+    'http://localhost:3000'
   ],
   credentials: true
 }));
