@@ -26,7 +26,8 @@ export const requirePermission = (permission) => {
         });
       }
 
-      req.user = user;
+      // Do NOT overwrite req.user here!
+      // req.user = user; // <-- Remove or comment out this line
       next();
     } catch (error) {
       return res.status(500).json({

@@ -84,11 +84,27 @@ export const getCategory = asyncHandler(async (req, res) => {
 export const createCategory = asyncHandler(async (req, res) => {
   const startTime = Date.now();
 
+  // Debug log for req.user
+  console.log('DEBUG: req.user in createCategory:', req.user);
+
   try {
-    const category = await Category.create({
-      ...req.body,
-      createdBy: req.user.userId
-    });
+    // Remove empty language fields
+    const data = { ...req.body };
+    if (data.name) {
+      if (!data.name.en || data.name.en.trim() === "") delete data.name.en;
+      if (!data.name.bn || data.name.bn.trim() === "") delete data.name.bn;
+    }
+    if (data.slug) {
+      if (!data.slug.en || data.slug.en.trim() === "") delete data.slug.en;
+      if (!data.slug.bn || data.slug.bn.trim() === "") delete data.slug.bn;
+    }
+    if (data.description) {
+      if (!data.description.en || data.description.en.trim() === "") delete data.description.en;
+      if (!data.description.bn || data.description.bn.trim() === "") delete data.description.bn;
+    }
+    data.createdBy = req.user.userId;
+
+    const category = await Category.create(data);
 
     const populatedCategory = await Category.findById(category._id)
       .populate('createdBy', 'name');
@@ -125,9 +141,24 @@ export const updateCategory = asyncHandler(async (req, res) => {
       throw new NotFoundError('Category not found');
     }
 
+    // Remove empty language fields
+    const data = { ...req.body };
+    if (data.name) {
+      if (!data.name.en || data.name.en.trim() === "") delete data.name.en;
+      if (!data.name.bn || data.name.bn.trim() === "") delete data.name.bn;
+    }
+    if (data.slug) {
+      if (!data.slug.en || data.slug.en.trim() === "") delete data.slug.en;
+      if (!data.slug.bn || data.slug.bn.trim() === "") delete data.slug.bn;
+    }
+    if (data.description) {
+      if (!data.description.en || data.description.en.trim() === "") delete data.description.en;
+      if (!data.description.bn || data.description.bn.trim() === "") delete data.description.bn;
+    }
+
     const updatedCategory = await Category.findByIdAndUpdate(
       id,
-      req.body,
+      data,
       { new: true, runValidators: true }
     ).populate('createdBy', 'name');
 

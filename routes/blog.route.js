@@ -3,6 +3,7 @@ import {
   createBlog, 
   getBlogsByLanguage, 
   getBlogBySlug, 
+  getBlogById,
   updateBlog, 
   deleteBlog,
   getCategoriesWithCount
@@ -18,6 +19,7 @@ router.get('/:lang/slug/:slug', validateLanguage, getBlogBySlug);
 router.get('/:lang/categories', validateLanguage, getCategoriesWithCount);
 
 // Protected routes
+router.get('/admin/:id', protect, getBlogById);
 router.post('/', protect, createBlog);
 router.put('/:id', protect, updateBlog);
 router.delete('/:id', protect, deleteBlog);

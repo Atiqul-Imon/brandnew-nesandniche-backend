@@ -120,6 +120,10 @@ export const createBlog = asyncHandler(async (req, res) => {
       }
     }
 
+    // Remove empty slug fields
+    if (slug && (!slug.en || slug.en.trim() === '')) delete slug.en;
+    if (slug && (!slug.bn || slug.bn.trim() === '')) delete slug.bn;
+
     // Calculate read time (rough estimate: 200 words per minute)
     const readTimeEn = content?.en ? Math.ceil(content.en.split(' ').length / 200) : null;
     const readTimeBn = content?.bn ? Math.ceil(content.bn.split(' ').length / 200) : null;
@@ -304,6 +308,47 @@ export const getFeaturedBlogs = asyncHandler(async (req, res) => {
     const duration = Date.now() - startTime;
     logger.logDatabase('read', 'blogs', duration, false);
     logger.error('Featured blogs retrieval failed', { error: error.message, language: lang });
+    throw error;
+  }
+});
+
+// @desc    Get single blog post by ID (Admin)
+// @route   GET /api/blogs/admin/:id
+// @access  Private (Admin/Editor/Owner)
+export const getBlogById = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  const { id } = req.params;
+
+  try {
+    const blog = await Blog.findById(id)
+      .populate('author', 'name email');
+
+    if (!blog) {
+      throw new NotFoundError('Blog post not found');
+    }
+
+    // Check permissions
+    const isOwner = blog.author._id.toString() === req.user.userId;
+    const isAdmin = req.user.role === 'admin';
+    const isEditor = req.user.role === 'editor';
+
+    if (!isOwner && !isAdmin && !isEditor) {
+      throw new AuthorizationError('You do not have permission to view this blog post');
+    }
+    
+    const duration = Date.now() - startTime;
+    logger.logDatabase('read', 'blogs', duration, true);
+    logger.info('Blog post retrieved for admin', { blogId: blog._id, userId: req.user.userId });
+
+    res.status(200).json({
+      success: true,
+      data: { blog }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('read', 'blogs', duration, false);
+    logger.error('Blog retrieval failed', { error: error.message, blogId: id, userId: req.user?.userId });
     throw error;
   }
 });

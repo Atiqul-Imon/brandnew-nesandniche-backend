@@ -4,13 +4,13 @@ const categorySchema = new mongoose.Schema({
   name: {
     en: {
       type: String,
-      required: [true, 'English category name is required'],
+      required: false,
       trim: true,
       maxlength: [50, 'Category name cannot exceed 50 characters']
     },
     bn: {
       type: String,
-      required: [true, 'Bangla category name is required'],
+      required: false,
       trim: true,
       maxlength: [50, 'Category name cannot exceed 50 characters']
     }
@@ -18,7 +18,7 @@ const categorySchema = new mongoose.Schema({
   slug: {
     en: {
       type: String,
-      required: [true, 'English category slug is required'],
+      required: false,
       unique: true,
       lowercase: true,
       trim: true,
@@ -26,7 +26,7 @@ const categorySchema = new mongoose.Schema({
     },
     bn: {
       type: String,
-      required: [true, 'Bangla category slug is required'],
+      required: false,
       unique: true,
       lowercase: true,
       trim: true,
@@ -85,6 +85,16 @@ categorySchema.virtual('blogCount', {
 // Ensure virtuals are serialized
 categorySchema.set('toJSON', { virtuals: true });
 categorySchema.set('toObject', { virtuals: true });
+
+// Add pre-validate hook to require at least one language
+categorySchema.pre('validate', function(next) {
+  const hasEnglish = this.name?.en && this.slug?.en;
+  const hasBangla = this.name?.bn && this.slug?.bn;
+  if (!hasEnglish && !hasBangla) {
+    return next(new Error('At least one language (English or Bangla) must be provided with name and slug'));
+  }
+  next();
+});
 
 const Category = mongoose.model('Category', categorySchema);
 
