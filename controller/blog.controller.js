@@ -426,13 +426,16 @@ export const updateBlog = asyncHandler(async (req, res) => {
 
     // Check slug uniqueness if slug is being updated
     if (req.body.slug) {
-      const existingSlugs = await Blog.find({
-        _id: { $ne: id },
-        $or: [
-          { 'slug.en': req.body.slug.en },
-          { 'slug.bn': req.body.slug.bn }
-        ]
-      });
+      const orConditions = [];
+      if (req.body.slug.en) {
+        orConditions.push({ 'slug.en': req.body.slug.en });
+      }
+      if (req.body.slug.bn) {
+        orConditions.push({ 'slug.bn': req.body.slug.bn });
+      }
+      const existingSlugs = orConditions.length > 0
+        ? await Blog.find({ _id: { $ne: id }, $or: orConditions })
+        : [];
 
       if (existingSlugs.length > 0) {
         throw new ValidationError('Slug already exists for one or both languages');
@@ -441,8 +444,12 @@ export const updateBlog = asyncHandler(async (req, res) => {
 
     // Calculate read time if content is updated
     if (req.body.content) {
-      const readTimeEn = Math.ceil(req.body.content.en.split(' ').length / 200);
-      const readTimeBn = Math.ceil(req.body.content.bn.split(' ').length / 200);
+      const readTimeEn = req.body.content.en && typeof req.body.content.en === 'string'
+        ? Math.ceil(req.body.content.en.split(' ').length / 200)
+        : null;
+      const readTimeBn = req.body.content.bn && typeof req.body.content.bn === 'string'
+        ? Math.ceil(req.body.content.bn.split(' ').length / 200)
+        : null;
       req.body.readTime = { en: readTimeEn, bn: readTimeBn };
     }
 
