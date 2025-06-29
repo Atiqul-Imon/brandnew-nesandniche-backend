@@ -1,5 +1,8 @@
-import express from 'express';
+// Load environment variables FIRST, before any other imports
 import dotenv from 'dotenv';
+dotenv.config();
+
+import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import connectDB from './config/db.js';
@@ -10,11 +13,15 @@ import categoryRoutes from './routes/category.route.js';
 import commentRoutes from './routes/comment.route.js';
 import { errorHandler, notFound } from './utils/errorHandler.js';
 import logger from './utils/logger.js';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
-// Load environment variables
-dotenv.config();
+// Debug: Check if environment variables are loaded
+console.log('🔍 Environment Variables Debug:');
+console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
+console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY);
+console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? '***SET***' : 'undefined');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('PORT:', process.env.PORT);
+console.log('---');
 
 // Initialize Express
 const app = express();
@@ -34,18 +41,12 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // Routes
 app.use('/api/users', userRoutes);
 app.use('/api/blogs', blogRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/comments', commentRoutes);
-
-// Serve uploaded images
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.get('/', (req, res) => {
   res.send('API is running...');

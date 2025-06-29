@@ -3,6 +3,7 @@ import User from '../model/user.model.js';
 import { asyncHandler, NotFoundError, AuthorizationError, ValidationError } from '../utils/errorHandler.js';
 import logger from '../utils/logger.js';
 import { generateSlug, generateUniqueSlug } from '../utils/slugGenerator.js';
+import cloudinary from '../config/cloudinary.js';
 
 // @desc    Create a new blog post
 // @route   POST /api/blogs
@@ -11,7 +12,7 @@ export const createBlog = asyncHandler(async (req, res) => {
   const startTime = Date.now();
   
   try {
-    let { title, content, excerpt, slug, category, tags, featuredImage, status, seoTitle, seoDescription, seoKeywords } = req.body;
+    let { title, content, excerpt, slug, category, tags, featuredImage, status, seoTitle, seoDescription, seoKeywords, author } = req.body;
 
     // Sanitize: Remove all fields for a language if all its fields are empty or falsy
     const isEmptyLang = (obj) => !obj || Object.values(obj).every(val => !val || (typeof val === 'string' && val.trim() === ''));
@@ -69,6 +70,42 @@ export const createBlog = asyncHandler(async (req, res) => {
 
     if (!featuredImage) {
       throw new ValidationError('Featured image is required');
+    }
+
+    // Handle author information
+    let authorData = {
+      user: req.user.userId, // Default to current user
+      name: req.user.name || 'Anonymous' // Default to current user's name
+    };
+
+    // If custom author data is provided, use it
+    if (author && typeof author === 'object') {
+      if (author.name && author.name.trim()) {
+        authorData.name = author.name.trim();
+      }
+      if (author.email && author.email.trim()) {
+        authorData.email = author.email.trim();
+      }
+      if (author.bio && author.bio.trim()) {
+        authorData.bio = author.bio.trim();
+      }
+      if (author.avatar && author.avatar.trim()) {
+        authorData.avatar = author.avatar.trim();
+      }
+      if (author.website && author.website.trim()) {
+        authorData.website = author.website.trim();
+      }
+      if (author.social && typeof author.social === 'object') {
+        authorData.social = {};
+        if (author.social.twitter) authorData.social.twitter = author.social.twitter.trim();
+        if (author.social.linkedin) authorData.social.linkedin = author.social.linkedin.trim();
+        if (author.social.github) authorData.social.github = author.social.github.trim();
+      }
+      
+      // If custom author name is provided and different from current user, remove user reference
+      if (author.name && author.name.trim() !== req.user.name) {
+        authorData.user = null; // This is a custom author, not a registered user
+      }
     }
 
     // Ensure tags is always an array
@@ -143,7 +180,7 @@ export const createBlog = asyncHandler(async (req, res) => {
       tags: tagsArray,
       featuredImage,
       status: status || 'draft',
-      author: req.user.userId,
+      author: authorData,
       readTime: {
         en: readTimeEn,
         bn: readTimeBn
@@ -158,7 +195,7 @@ export const createBlog = asyncHandler(async (req, res) => {
     
     const duration = Date.now() - startTime;
     logger.logDatabase('create', 'blogs', duration, true);
-    logger.info('Blog post created', { blogId: blog._id, author: req.user.userId });
+    logger.info('Blog post created', { blogId: blog._id, author: authorData.name });
 
     res.status(201).json({
       success: true,
@@ -334,8 +371,14 @@ export const getBlogById = asyncHandler(async (req, res) => {
       throw new NotFoundError('Blog post not found');
     }
 
-    // Check permissions
-    const isOwner = blog.author._id.toString() === req.user.userId;
+    // Check permissions - handle both old and new author structure
+    let isOwner = false;
+    if (blog.author && typeof blog.author === 'object' && blog.author.user) {
+      isOwner = blog.author.user.toString() === req.user.userId;
+    } else if (blog.author) {
+      isOwner = blog.author.toString() === req.user.userId;
+    }
+    
     const isAdmin = req.user.role === 'admin';
     const isEditor = req.user.role === 'editor';
 
@@ -382,7 +425,7 @@ export const getBlogBySlug = asyncHandler(async (req, res) => {
       [`category.${lang}`]: { $exists: true, $ne: null, $ne: '' }
     })
     .select(`title.${lang} content.${lang} excerpt.${lang} slug.${lang} category.${lang} featuredImage publishedAt readTime.${lang} viewCount author tags.${lang} seoTitle.${lang} seoDescription.${lang} seoKeywords.${lang}`)
-    .populate('author', 'name email');
+    .populate('author.user', 'name email');
 
     if (!blog) {
       throw new NotFoundError('Blog post not found');
@@ -422,13 +465,55 @@ export const updateBlog = asyncHandler(async (req, res) => {
       throw new NotFoundError('Blog post not found');
     }
 
-    // Check permissions
-    const isOwner = blog.author.toString() === req.user.userId;
+    // Check permissions - handle both old and new author structure
+    let isOwner = false;
+    if (blog.author && typeof blog.author === 'object' && blog.author.user) {
+      isOwner = blog.author.user.toString() === req.user.userId;
+    } else if (blog.author) {
+      isOwner = blog.author.toString() === req.user.userId;
+    }
+    
     const isAdmin = req.user.role === 'admin';
     const isEditor = req.user.role === 'editor';
 
     if (!isOwner && !isAdmin && !isEditor) {
       throw new AuthorizationError('You do not have permission to update this blog post');
+    }
+
+    // Handle author information update
+    if (req.body.author && typeof req.body.author === 'object') {
+      const authorData = { ...blog.author };
+      
+      if (req.body.author.name && req.body.author.name.trim()) {
+        authorData.name = req.body.author.name.trim();
+      }
+      if (req.body.author.email && req.body.author.email.trim()) {
+        authorData.email = req.body.author.email.trim();
+      }
+      if (req.body.author.bio && req.body.author.bio.trim()) {
+        authorData.bio = req.body.author.bio.trim();
+      }
+      if (req.body.author.avatar && req.body.author.avatar.trim()) {
+        authorData.avatar = req.body.author.avatar.trim();
+      }
+      if (req.body.author.website && req.body.author.website.trim()) {
+        authorData.website = req.body.author.website.trim();
+      }
+      if (req.body.author.social && typeof req.body.author.social === 'object') {
+        authorData.social = { ...authorData.social };
+        if (req.body.author.social.twitter) authorData.social.twitter = req.body.author.social.twitter.trim();
+        if (req.body.author.social.linkedin) authorData.social.linkedin = req.body.author.social.linkedin.trim();
+        if (req.body.author.social.github) authorData.social.github = req.body.author.social.github.trim();
+      }
+      
+      // If custom author name is provided and different from current user, remove user reference
+      if (req.body.author.name && req.body.author.name.trim() !== req.user.name) {
+        authorData.user = null; // This is a custom author, not a registered user
+      } else if (!authorData.user) {
+        authorData.user = req.user.userId; // Restore user reference if name matches current user
+      }
+      
+      req.body.author = authorData;
     }
 
     // Check slug uniqueness if slug is being updated
@@ -473,7 +558,7 @@ export const updateBlog = asyncHandler(async (req, res) => {
       id,
       req.body,
       { new: true, runValidators: true }
-    ).populate('author', 'name');
+    ).populate('author.user', 'name');
 
     const duration = Date.now() - startTime;
     logger.logDatabase('update', 'blogs', duration, true);
@@ -507,8 +592,14 @@ export const deleteBlog = asyncHandler(async (req, res) => {
       throw new NotFoundError('Blog post not found');
     }
 
-    // Check permissions
-    const isOwner = blog.author.toString() === req.user.userId;
+    // Check permissions - handle both old and new author structure
+    let isOwner = false;
+    if (blog.author && typeof blog.author === 'object' && blog.author.user) {
+      isOwner = blog.author.user.toString() === req.user.userId;
+    } else if (blog.author) {
+      isOwner = blog.author.toString() === req.user.userId;
+    }
+    
     const isAdmin = req.user.role === 'admin';
 
     if (!isOwner && !isAdmin) {

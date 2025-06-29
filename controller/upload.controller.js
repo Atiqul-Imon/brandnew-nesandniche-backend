@@ -41,98 +41,65 @@ export const uploadImage = async (req, res) => {
       isConfigured: isCloudinaryConfigured
     });
 
-    if (isCloudinaryConfigured) {
-      try {
-        // Upload to Cloudinary
-        const b64 = Buffer.from(req.file.buffer).toString('base64');
-        const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+    if (!isCloudinaryConfigured) {
+      logger.error('Cloudinary not configured', {
+        userId: req.user?.userId,
+        missingVars: {
+          cloudName: !process.env.CLOUDINARY_CLOUD_NAME,
+          apiKey: !process.env.CLOUDINARY_API_KEY,
+          apiSecret: !process.env.CLOUDINARY_API_SECRET
+        }
+      });
 
-        logger.info('Attempting Cloudinary upload...');
+      return res.status(500).json({
+        success: false,
+        message: 'Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables.',
+        error: 'CLOUDINARY_NOT_CONFIGURED'
+      });
+    }
 
-        const result = await cloudinary.uploader.upload(dataURI, {
-          folder: 'blog-images',
-          resource_type: 'auto',
-          transformation: [
-            { width: 1200, height: 800, crop: 'fill', quality: 'auto' },
-            { fetch_format: 'auto' }
-          ]
-        });
+    // Upload to Cloudinary
+    try {
+      const b64 = Buffer.from(req.file.buffer).toString('base64');
+      const dataURI = `data:${req.file.mimetype};base64,${b64}`;
 
-        logger.info('Image uploaded to Cloudinary successfully', {
-          publicId: result.public_id,
-          url: result.secure_url,
-          userId: req.user?.userId
-        });
+      logger.info('Attempting Cloudinary upload...');
 
-        res.status(200).json({
-          success: true,
-          data: {
-            url: result.secure_url,
-            publicId: result.public_id,
-            width: result.width,
-            height: result.height,
-            format: result.format
-          }
-        });
-      } catch (cloudinaryError) {
-        logger.error('Cloudinary upload failed, falling back to local storage', {
-          error: cloudinaryError.message,
-          userId: req.user?.userId
-        });
-        
-        // Fallback to local storage if Cloudinary fails
-        const timestamp = Date.now();
-        const filename = `${timestamp}-${req.file.originalname}`;
-        const filepath = path.join(uploadsDir, filename);
-        
-        fs.writeFileSync(filepath, req.file.buffer);
-        
-        // Create a URL for the local file
-        const localUrl = `http://localhost:5000/uploads/${filename}`;
-        
-        logger.info('Image saved locally as fallback', {
-          filename,
-          url: localUrl,
-          userId: req.user?.userId
-        });
+      const result = await cloudinary.uploader.upload(dataURI, {
+        folder: 'blog-images',
+        resource_type: 'auto',
+        transformation: [
+          { width: 1200, height: 800, crop: 'fill', quality: 'auto' },
+          { fetch_format: 'auto' }
+        ]
+      });
 
-        res.status(200).json({
-          success: true,
-          data: {
-            url: localUrl,
-            publicId: filename,
-            width: null,
-            height: null,
-            format: req.file.mimetype.split('/')[1]
-          }
-        });
-      }
-    } else {
-      // Fallback: Save locally
-      const timestamp = Date.now();
-      const filename = `${timestamp}-${req.file.originalname}`;
-      const filepath = path.join(uploadsDir, filename);
-      
-      fs.writeFileSync(filepath, req.file.buffer);
-      
-      // Create a URL for the local file
-      const localUrl = `http://localhost:5000/uploads/${filename}`;
-      
-      logger.info('Image saved locally successfully', {
-        filename,
-        url: localUrl,
+      logger.info('Image uploaded to Cloudinary successfully', {
+        publicId: result.public_id,
+        url: result.secure_url,
         userId: req.user?.userId
       });
 
       res.status(200).json({
         success: true,
         data: {
-          url: localUrl,
-          publicId: filename,
-          width: null,
-          height: null,
-          format: req.file.mimetype.split('/')[1]
+          url: result.secure_url,
+          publicId: result.public_id,
+          width: result.width,
+          height: result.height,
+          format: result.format
         }
+      });
+    } catch (cloudinaryError) {
+      logger.error('Cloudinary upload failed', {
+        error: cloudinaryError.message,
+        userId: req.user?.userId
+      });
+      
+      res.status(500).json({
+        success: false,
+        message: 'Failed to upload image to Cloudinary',
+        error: cloudinaryError.message
       });
     }
 
@@ -159,6 +126,19 @@ export const deleteImage = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Public ID is required'
+      });
+    }
+
+    // Check if Cloudinary is configured
+    const isCloudinaryConfigured = process.env.CLOUDINARY_CLOUD_NAME && 
+                                  process.env.CLOUDINARY_API_KEY && 
+                                  process.env.CLOUDINARY_API_SECRET;
+
+    if (!isCloudinaryConfigured) {
+      return res.status(500).json({
+        success: false,
+        message: 'Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables.',
+        error: 'CLOUDINARY_NOT_CONFIGURED'
       });
     }
 

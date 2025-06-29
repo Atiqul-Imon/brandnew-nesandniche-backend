@@ -60,9 +60,44 @@ const blogSchema = new mongoose.Schema({
     }
   },
   author: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: [true, 'Author is required']
+    // Support both registered users and custom author names
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: false
+    },
+    name: {
+      type: String,
+      required: [true, 'Author name is required'],
+      trim: true,
+      maxlength: [100, 'Author name cannot exceed 100 characters']
+    },
+    email: {
+      type: String,
+      required: false,
+      trim: true,
+      lowercase: true,
+      match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email address']
+    },
+    bio: {
+      type: String,
+      required: false,
+      maxlength: [500, 'Author bio cannot exceed 500 characters']
+    },
+    avatar: {
+      type: String,
+      required: false
+    },
+    website: {
+      type: String,
+      required: false,
+      trim: true
+    },
+    social: {
+      twitter: String,
+      linkedin: String,
+      github: String
+    }
   },
   category: {
     en: {

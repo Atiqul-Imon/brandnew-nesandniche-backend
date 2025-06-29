@@ -111,14 +111,16 @@ userSchema.methods.hasPermission = function(permission) {
 userSchema.methods.canEditBlog = function(blog) {
   if (this.role === 'admin') return true;
   if (this.role === 'editor' && this.hasPermission('edit_all_blogs')) return true;
-  if (blog.author.toString() === this._id.toString()) return true;
+  const authorId = blog.author?.user || blog.author;
+  if (authorId && authorId.toString() === this._id.toString()) return true;
   return false;
 };
 
 // Check if user can delete a specific blog
 userSchema.methods.canDeleteBlog = function(blog) {
   if (this.role === 'admin') return true;
-  if (blog.author.toString() === this._id.toString()) return true;
+  const authorId = blog.author?.user || blog.author;
+  if (authorId && authorId.toString() === this._id.toString()) return true;
   return false;
 };
 

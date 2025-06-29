@@ -168,7 +168,8 @@ export const updateComment = asyncHandler(async (req, res) => {
     }
 
     // Check if user can edit this comment
-    if (comment.author.toString() !== req.user.userId && req.user.role !== 'admin') {
+    const authorId = comment.author?.user || comment.author;
+    if (authorId && authorId.toString() !== req.user.userId && req.user.role !== 'admin') {
       throw new AuthorizationError('Not authorized to edit this comment');
     }
 
@@ -215,7 +216,8 @@ export const deleteComment = asyncHandler(async (req, res) => {
     }
 
     // Check if user can delete this comment
-    if (comment.author.toString() !== req.user.userId && req.user.role !== 'admin') {
+    const authorId = comment.author?.user || comment.author;
+    if (authorId && authorId.toString() !== req.user.userId && req.user.role !== 'admin') {
       throw new AuthorizationError('Not authorized to delete this comment');
     }
 
