@@ -8,7 +8,7 @@ async function testBlogCreation() {
     
     // Step 1: Login to get a token
     console.log('\\n📝 Step 1: Logging in...');
-    const loginResponse = await axios.post(`${API_BASE_URL}/users/login`, {
+    const loginResponse = await axios.post(`${API_BASE_URL}/api/users/login`, {
       email: 'shorna@gmail.com',
       password: 'test123'
     });
@@ -34,7 +34,7 @@ async function testBlogCreation() {
       seoKeywords: { en: ['test', 'blog'], bn: [] }
     };
     
-    const blogResponse = await axios.post(`${API_BASE_URL}/blogs`, blogData, {
+    const blogResponse = await axios.post(`${API_BASE_URL}/api/blogs`, blogData, {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`

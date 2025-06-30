@@ -11,7 +11,7 @@ async function testUpload() {
     
     // Step 1: Login to get a token
     console.log('\\n📝 Step 1: Logging in...');
-    const loginResponse = await axios.post(`${API_BASE_URL}/users/login`, {
+    const loginResponse = await axios.post(`${API_BASE_URL}/api/users/login`, {
       email: 'test2@gmail.com',
       password: 'test123'
     });
@@ -30,7 +30,7 @@ async function testUpload() {
     const formData = new FormData();
     formData.append('image', fs.createReadStream(testImagePath));
     
-    const uploadResponse = await axios.post(`${API_BASE_URL}/upload/image`, formData, {
+    const uploadResponse = await axios.post(`${API_BASE_URL}/api/upload/image`, formData, {
       headers: {
         'Authorization': `Bearer ${token}`,
         ...formData.getHeaders()
