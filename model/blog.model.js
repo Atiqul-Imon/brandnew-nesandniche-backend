@@ -163,7 +163,9 @@ const blogSchema = new mongoose.Schema({
   seoKeywords: {
     en: [String],
     bn: [String]
-  }
+  },
+  draft: { type: Boolean, default: false },
+  draftOwner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, {
   timestamps: true
 });

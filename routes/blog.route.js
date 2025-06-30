@@ -24,4 +24,10 @@ router.post('/', protect, createBlog);
 router.put('/:id', protect, updateBlog);
 router.delete('/:id', protect, deleteBlog);
 
+// Draft endpoints
+router.post('/draft', protect, createBlog);
+router.put('/draft/:id', protect, updateBlog);
+router.get('/draft/:id', protect, getBlogById);
+router.get('/drafts', protect, getBlogsByLanguage);
+
 export default router; 

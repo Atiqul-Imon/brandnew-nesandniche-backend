@@ -730,4 +730,54 @@ export const getCategoriesWithCount = asyncHandler(async (req, res) => {
     logger.error('Categories with count retrieval failed', { error: error.message, language: lang });
     throw error;
   }
-}); 
+});
+
+// Create a new draft
+export const createDraft = async (req, res) => {
+  try {
+    const draft = new Blog({
+      ...req.body,
+      draft: true,
+      draftOwner: req.user._id,
+      status: 'draft',
+    });
+    await draft.save();
+    res.status(201).json({ success: true, data: { draftId: draft._id, draft } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Update an existing draft
+export const updateDraft = async (req, res) => {
+  try {
+    const draft = await Blog.findOne({ _id: req.params.id, draft: true, draftOwner: req.user._id });
+    if (!draft) return res.status(404).json({ success: false, message: 'Draft not found' });
+    Object.assign(draft, req.body);
+    await draft.save();
+    res.json({ success: true, data: { draft } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Get a draft by ID
+export const getDraft = async (req, res) => {
+  try {
+    const draft = await Blog.findOne({ _id: req.params.id, draft: true, draftOwner: req.user._id });
+    if (!draft) return res.status(404).json({ success: false, message: 'Draft not found' });
+    res.json({ success: true, data: { draft } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// List all drafts for the user
+export const listDrafts = async (req, res) => {
+  try {
+    const drafts = await Blog.find({ draft: true, draftOwner: req.user._id }).sort({ updatedAt: -1 });
+    res.json({ success: true, data: { drafts } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+}; 
