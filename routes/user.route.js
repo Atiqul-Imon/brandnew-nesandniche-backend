@@ -7,24 +7,36 @@ import {
   getAllUsers,
   updateUserRole,
   updateUserStatus,
-  deleteUser
+  deleteUser,
+  getUserProfileByUsername,
+  toggleFollow
 } from '../controller/user.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
+import { 
+  requireAdmin, 
+  requireModerator, 
+  canManageUsers, 
+  canManageRoles 
+} from '../middleware/permissions.middleware.js';
 
 const router = express.Router();
 
 // Public routes
 router.post('/register', registerUser);
 router.post('/login', loginUser);
+router.get('/profile/:username', getUserProfileByUsername);
 
 // Protected routes
 router.get('/profile', protect, getUserProfile);
 router.put('/profile', protect, updateUserProfile);
+router.post('/:id/follow', protect, toggleFollow);
 
-// Admin routes (all protected)
-router.get('/', protect, getAllUsers);
-router.put('/:id/role', protect, updateUserRole);
-router.put('/:id/status', protect, updateUserStatus);
-router.delete('/:id', protect, deleteUser);
+// Admin/Moderator only routes
+router.get('/', protect, canManageUsers, getAllUsers);
+router.put('/:id/status', protect, canManageUsers, updateUserStatus);
+router.delete('/:id', protect, requireAdmin, deleteUser);
+
+// Admin only routes
+router.put('/:id/role', protect, canManageRoles, updateUserRole);
 
 export default router; 

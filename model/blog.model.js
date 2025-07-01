@@ -19,12 +19,24 @@ const blogSchema = new mongoose.Schema({
     en: {
       type: String,
       required: false,
-      minlength: [50, 'English content must be at least 50 characters long']
+      validate: {
+        validator: function(v) {
+          if (!v || v.trim() === '') return true;
+          return v.length >= 50;
+        },
+        message: 'English content must be at least 50 characters long'
+      }
     },
     bn: {
       type: String,
       required: false,
-      minlength: [50, 'Bangla content must be at least 50 characters long']
+      validate: {
+        validator: function(v) {
+          if (!v || v.trim() === '') return true;
+          return v.length >= 50;
+        },
+        message: 'Bangla content must be at least 50 characters long'
+      }
     }
   },
   excerpt: {
@@ -127,7 +139,7 @@ const blogSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['draft', 'published', 'archived'],
+    enum: ['draft', 'published', 'archived', 'rejected'],
     default: 'draft'
   },
   publishedAt: {
@@ -165,7 +177,31 @@ const blogSchema = new mongoose.Schema({
     bn: [String]
   },
   draft: { type: Boolean, default: false },
-  draftOwner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
+  draftOwner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  // Approval fields
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  approvedAt: {
+    type: Date,
+    default: null
+  },
+  // Rejection fields
+  rejectedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  rejectedAt: {
+    type: Date,
+    default: null
+  },
+  rejectionReason: {
+    type: String,
+    default: null
+  },
 }, {
   timestamps: true
 });

@@ -780,4 +780,484 @@ export const listDrafts = async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
-}; 
+};
+
+// @desc    Approve a blog post (Moderator/Admin only)
+// @route   PUT /api/blogs/:id/approve
+// @access  Private (Moderator/Admin)
+export const approveBlog = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  const blog = await Blog.findById(id);
+  if (!blog) {
+    throw new NotFoundError('Blog not found');
+  }
+
+  // Check if blog is already approved
+  if (blog.status === 'published') {
+    return res.status(400).json({
+      success: false,
+      message: 'Blog is already published'
+    });
+  }
+
+  // Update blog status to published
+  blog.status = 'published';
+  blog.publishedAt = new Date();
+  blog.approvedBy = req.user.userId;
+  blog.approvedAt = new Date();
+  
+  await blog.save();
+
+  logger.info('Blog approved', { 
+    blogId: blog._id, 
+    approvedBy: req.user.userId,
+    title: blog.title?.en || blog.title?.bn 
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Blog approved and published successfully',
+    data: { blog }
+  });
+});
+
+// @desc    Reject a blog post (Moderator/Admin only)
+// @route   PUT /api/blogs/:id/reject
+// @access  Private (Moderator/Admin)
+export const rejectBlog = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+  
+  const blog = await Blog.findById(id);
+  if (!blog) {
+    throw new NotFoundError('Blog not found');
+  }
+
+  // Check if blog is already rejected
+  if (blog.status === 'rejected') {
+    return res.status(400).json({
+      success: false,
+      message: 'Blog is already rejected'
+    });
+  }
+
+  // Update blog status to rejected
+  blog.status = 'rejected';
+  blog.rejectedBy = req.user.userId;
+  blog.rejectedAt = new Date();
+  blog.rejectionReason = reason || 'No reason provided';
+  
+  await blog.save();
+
+  logger.info('Blog rejected', { 
+    blogId: blog._id, 
+    rejectedBy: req.user.userId,
+    reason: reason,
+    title: blog.title?.en || blog.title?.bn 
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Blog rejected successfully',
+    data: { blog }
+  });
+});
+
+// @desc    Toggle blog status (Moderator/Admin only)
+// @route   PUT /api/blogs/:id/status
+// @access  Private (Moderator/Admin)
+export const toggleBlogStatus = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  
+  const validStatuses = ['draft', 'published', 'archived', 'rejected'];
+  if (!validStatuses.includes(status)) {
+    throw new ValidationError('Invalid status. Must be one of: draft, published, archived, rejected');
+  }
+  
+  const blog = await Blog.findById(id);
+  if (!blog) {
+    throw new NotFoundError('Blog not found');
+  }
+
+  const oldStatus = blog.status;
+  blog.status = status;
+  
+  // Set publishedAt if publishing
+  if (status === 'published' && oldStatus !== 'published') {
+    blog.publishedAt = new Date();
+    blog.approvedBy = req.user.userId;
+    blog.approvedAt = new Date();
+  }
+  
+  // Clear approval/rejection data if changing from published/rejected
+  if (status !== 'published' && oldStatus === 'published') {
+    blog.approvedBy = undefined;
+    blog.approvedAt = undefined;
+  }
+  
+  if (status !== 'rejected' && oldStatus === 'rejected') {
+    blog.rejectedBy = undefined;
+    blog.rejectedAt = undefined;
+    blog.rejectionReason = undefined;
+  }
+  
+  await blog.save();
+
+  logger.info('Blog status changed', { 
+    blogId: blog._id, 
+    changedBy: req.user.userId,
+    oldStatus,
+    newStatus: status,
+    title: blog.title?.en || blog.title?.bn 
+  });
+
+  res.status(200).json({
+    success: true,
+    message: `Blog status changed from ${oldStatus} to ${status}`,
+    data: { blog }
+  });
+});
+
+// @desc    Get all blogs with filtering and pagination
+// @route   GET /api/blogs
+// @access  Public
+export const getAllBlogs = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      status = 'published',
+      language = req.query.lang || req.query.language || 'en',
+      category,
+      author,
+      sort = 'publishedAt',
+      order = 'desc'
+    } = req.query;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Build query
+    let query = {};
+    
+    // Status filter
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+    
+    // Language filter
+    if (language) {
+      query[`title.${language}`] = { $exists: true, $ne: null, $ne: '' };
+      query[`content.${language}`] = { $exists: true, $ne: null, $ne: '' };
+      query[`excerpt.${language}`] = { $exists: true, $ne: null, $ne: '' };
+      query[`slug.${language}`] = { $exists: true, $ne: null, $ne: '' };
+      query[`category.${language}`] = { $exists: true, $ne: null, $ne: '' };
+    }
+    
+    // Author filter
+    if (author) {
+      query['author.user'] = author;
+    }
+
+    // Build sort object
+    let sortObj = {};
+    sortObj[sort] = order === 'desc' ? -1 : 1;
+    sortObj['createdAt'] = -1; // Secondary sort
+
+    const blogs = await Blog.find(query)
+      .sort(sortObj)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate('author.user', 'name username profileImage');
+
+    const total = await Blog.countDocuments(query);
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'blogs', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        blogs,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'blogs', duration, false);
+    logger.error('Blogs retrieval failed', { error: error.message });
+    throw error;
+  }
+});
+
+// @desc    Search blogs
+// @route   GET /api/blogs/search
+// @access  Public
+export const searchBlogs = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    const { 
+      q, 
+      page = 1, 
+      limit = 10, 
+      language = 'en',
+      status = 'published'
+    } = req.query;
+
+    if (!q || q.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Build search query
+    const searchQuery = {
+      status: status,
+      $or: [
+        { [`title.${language}`]: { $regex: q, $options: 'i' } },
+        { [`content.${language}`]: { $regex: q, $options: 'i' } },
+        { [`excerpt.${language}`]: { $regex: q, $options: 'i' } },
+        { [`category.${language}`]: { $regex: q, $options: 'i' } },
+        { tags: { $in: [new RegExp(q, 'i')] } }
+      ]
+    };
+
+    const blogs = await Blog.find(searchQuery)
+      .sort({ publishedAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate('author.user', 'name username profileImage');
+
+    const total = await Blog.countDocuments(searchQuery);
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('search', 'blogs', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        blogs,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('search', 'blogs', duration, false);
+    logger.error('Blog search failed', { error: error.message });
+    throw error;
+  }
+});
+
+// @desc    Get blogs by category
+// @route   GET /api/blogs/category/:categorySlug
+// @access  Public
+export const getBlogsByCategory = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    const { categorySlug } = req.params;
+    const { 
+      page = 1, 
+      limit = 10, 
+      language = 'en',
+      status = 'published'
+    } = req.query;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const query = {
+      status: status,
+      [`category.${language}`]: categorySlug
+    };
+
+    const blogs = await Blog.find(query)
+      .sort({ publishedAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate('author.user', 'name username profileImage');
+
+    const total = await Blog.countDocuments(query);
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'blogs', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        blogs,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'blogs', duration, false);
+    logger.error('Category blogs retrieval failed', { error: error.message });
+    throw error;
+  }
+});
+
+// @desc    Get blogs by author
+// @route   GET /api/blogs/author/:authorId
+// @access  Public
+export const getBlogsByAuthor = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    const { authorId } = req.params;
+    const { 
+      page = 1, 
+      limit = 10, 
+      status = 'published'
+    } = req.query;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const query = {
+      status: status,
+      'author.user': authorId
+    };
+
+    const blogs = await Blog.find(query)
+      .sort({ publishedAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate('author.user', 'name username profileImage');
+
+    const total = await Blog.countDocuments(query);
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'blogs', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        blogs,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'blogs', duration, false);
+    logger.error('Author blogs retrieval failed', { error: error.message });
+    throw error;
+  }
+});
+
+// @desc    Get recent blogs
+// @route   GET /api/blogs/recent
+// @access  Public
+export const getRecentBlogs = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    const { limit = 5, language = 'en' } = req.query;
+    
+    const query = {
+      status: 'published',
+      [`title.${language}`]: { $exists: true, $ne: null }
+    };
+
+    const blogs = await Blog.find(query)
+      .sort({ publishedAt: -1 })
+      .limit(parseInt(limit))
+      .populate('author.user', 'name username profileImage');
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'blogs', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: { blogs }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'blogs', duration, false);
+    logger.error('Recent blogs retrieval failed', { error: error.message });
+    throw error;
+  }
+});
+
+// @desc    Get popular blogs
+// @route   GET /api/blogs/popular
+// @access  Public
+export const getPopularBlogs = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    const { limit = 5, language = 'en', period = '7d' } = req.query;
+    
+    // Calculate date range based on period
+    const now = new Date();
+    let startDate;
+    switch (period) {
+      case '1d':
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        break;
+      case '7d':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30d':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    }
+    
+    const query = {
+      status: 'published',
+      publishedAt: { $gte: startDate },
+      [`title.${language}`]: { $exists: true, $ne: null }
+    };
+
+    const blogs = await Blog.find(query)
+      .sort({ viewCount: -1, publishedAt: -1 })
+      .limit(parseInt(limit))
+      .populate('author.user', 'name username profileImage');
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'blogs', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: { blogs }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'blogs', duration, false);
+    logger.error('Popular blogs retrieval failed', { error: error.message });
+    throw error;
+  }
+}); 

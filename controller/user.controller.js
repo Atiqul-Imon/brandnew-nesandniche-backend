@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../model/user.model.js';
 import logger from '../utils/logger.js';
+import mongoose from 'mongoose';
 
 // Generate JWT Token
 const generateToken = (userId) => {
@@ -15,6 +16,7 @@ const generateToken = (userId) => {
 // @access  Public
 export const registerUser = async (req, res) => {
   try {
+    console.log('Register payload:', req.body);
     const { name, email, password, language = 'en' } = req.body;
 
     // Check if all required fields are provided
@@ -42,14 +44,16 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    // Create user (let the model hash the password)
-    const user = await User.create({
-      name,
-      email,
-      password, // plain password - model will hash it
-      language,
-      role: 'admin' // Make all users admin by default
-    });
+    // Determine role: first user is admin, others are user
+    const userCount = await User.countDocuments();
+    const role = userCount === 0 ? 'admin' : 'user';
+
+    // Only allow whitelisted fields
+    const userData = { name, email, password, language, role };
+    const user = await User.create(userData);
+    // Remove password from user object before sending
+    const userObj = user.toObject();
+    delete userObj.password;
 
     // Generate token
     const token = generateToken(user._id);
@@ -60,7 +64,7 @@ export const registerUser = async (req, res) => {
       success: true,
       message: 'User registered successfully',
       data: {
-        user,
+        user: userObj,
         token
       }
     });
@@ -90,6 +94,7 @@ export const registerUser = async (req, res) => {
 // @access  Public
 export const loginUser = async (req, res) => {
   try {
+    console.log('Login payload:', req.body);
     const { email, password } = req.body;
 
     // Check if email and password are provided
@@ -120,6 +125,10 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    // Remove password from user object before sending
+    const userObj = user.toObject();
+    delete userObj.password;
+
     // Generate token
     const token = generateToken(user._id);
 
@@ -129,7 +138,7 @@ export const loginUser = async (req, res) => {
       success: true,
       message: 'Login successful',
       data: {
-        user,
+        user: userObj,
         token
       }
     });
@@ -224,45 +233,90 @@ export const updateUserProfile = async (req, res) => {
   }
 };
 
-// @desc    Get all users (admin only)
+// @desc    Get all users (Admin only)
 // @route   GET /api/users
-// @access  Private/Admin
+// @access  Private (Admin only)
 export const getAllUsers = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const sortBy = req.query.sortBy || 'createdAt';
-    const sortOrder = req.query.sortOrder || 'desc';
+    // Check if current user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins can view all users'
+      });
+    }
+
+    const { page = 1, limit = 20, role, search, sort = 'createdAt' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Build query
+    let query = {};
     
-    const skip = (page - 1) * limit;
+    if (role) {
+      query.role = role;
+    }
     
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { username: { $regex: search, $options: 'i' } }
+      ];
+    }
+
     // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
-    
-    // Get users with pagination
-    const users = await User.find({})
-      .select('-password')
-      .sort(sort)
+    let sortObj = {};
+    switch (sort) {
+      case 'name':
+        sortObj = { name: 1 };
+        break;
+      case 'email':
+        sortObj = { email: 1 };
+        break;
+      case 'role':
+        sortObj = { role: 1 };
+        break;
+      case 'lastLogin':
+        sortObj = { lastLogin: -1 };
+        break;
+      default:
+        sortObj = { createdAt: -1 };
+    }
+
+    const users = await User.find(query)
+      .select('-password -verificationToken -emailVerificationToken')
+      .sort(sortObj)
       .skip(skip)
-      .limit(limit);
-    
-    // Get total count
-    const total = await User.countDocuments({});
-    
+      .limit(parseInt(limit));
+
+    const total = await User.countDocuments(query);
+
+    // Get role statistics
+    const roleStats = await User.aggregate([
+      { $group: { _id: '$role', count: { $sum: 1 } } }
+    ]);
+
     res.status(200).json({
       success: true,
       data: {
         users,
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit)
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        },
+        roleStats: roleStats.reduce((acc, stat) => {
+          acc[stat._id] = stat.count;
+          return acc;
+        }, {})
       }
     });
 
   } catch (error) {
     console.error('Get all users error:', error);
+    logger.error('Get all users failed', { error: error.message, adminId: req.user?.userId });
+    
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -270,42 +324,74 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
-// @desc    Update user role (admin only)
+// @desc    Update user role (Admin only)
 // @route   PUT /api/users/:id/role
-// @access  Private/Admin
+// @access  Private (Admin only)
 export const updateUserRole = async (req, res) => {
   try {
     const { id } = req.params;
     const { role } = req.body;
-    
-    if (!role || !['admin', 'editor', 'user'].includes(role)) {
-      return res.status(400).json({
+
+    // Check if current user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
         success: false,
-        message: 'Role must be admin, editor, or user'
+        message: 'Only admins can update user roles'
       });
     }
-    
+
+    // Validate role
+    const validRoles = ['user', 'editor', 'moderator', 'admin'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role. Must be one of: user, editor, moderator, admin'
+      });
+    }
+
+    // Prevent admin from demoting themselves
+    if (id === req.user.userId && role !== 'admin') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot demote yourself from admin role'
+      });
+    }
+
+    // Find and update user
     const user = await User.findByIdAndUpdate(
       id,
       { role },
       { new: true, runValidators: true }
     ).select('-password');
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
-    
+
+    logger.info('User role updated', { 
+      adminId: req.user.userId, 
+      userId: id, 
+      oldRole: user.role, 
+      newRole: role 
+    });
+
     res.status(200).json({
       success: true,
-      message: 'User role updated successfully',
+      message: `User role updated to ${role}`,
       data: { user }
     });
 
   } catch (error) {
     console.error('Update user role error:', error);
+    logger.error('User role update failed', { 
+      error: error.message, 
+      adminId: req.user?.userId,
+      userId: req.params.id 
+    });
+    
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -387,6 +473,118 @@ export const deleteUser = async (req, res) => {
 
   } catch (error) {
     console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get user profile by username
+// @route   GET /api/users/profile/:username
+// @access  Public
+export const getUserProfileByUsername = async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    const user = await User.findOne({ username })
+      .select('-password -verificationToken -emailVerificationToken')
+      .populate('followers', 'name username profileImage')
+      .populate('following', 'name username profileImage');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Get user's blogs count
+    const blogsCount = await mongoose.model('Blog').countDocuments({
+      'author.user': user._id,
+      status: 'published'
+    });
+
+    // Get user's comments count
+    const commentsCount = await mongoose.model('Comment').countDocuments({
+      author: user._id,
+      isApproved: true
+    });
+
+    const profileData = {
+      ...user.toJSON(),
+      stats: {
+        blogsCount,
+        commentsCount,
+        followerCount: user.followers.length,
+        followingCount: user.following.length
+      }
+    };
+
+    res.status(200).json({
+      success: true,
+      data: { user: profileData }
+    });
+
+  } catch (error) {
+    console.error('Get user profile error:', error);
+    logger.error('Get user profile failed', { error: error.message, username: req.params.username });
+    
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Follow/Unfollow user
+// @route   POST /api/users/:id/follow
+// @access  Private
+export const toggleFollow = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentUserId = req.user.userId;
+
+    // Cannot follow yourself
+    if (id === currentUserId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot follow yourself'
+      });
+    }
+
+    const currentUser = await User.findById(currentUserId);
+    const targetUser = await User.findById(id);
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const isFollowing = currentUser.isFollowing(id);
+
+    if (isFollowing) {
+      await currentUser.unfollow(id);
+      res.status(200).json({
+        success: true,
+        message: 'Unfollowed successfully',
+        data: { following: false }
+      });
+    } else {
+      await currentUser.follow(id);
+      res.status(200).json({
+        success: true,
+        message: 'Followed successfully',
+        data: { following: true }
+      });
+    }
+
+  } catch (error) {
+    console.error('Toggle follow error:', error);
+    logger.error('Toggle follow failed', { error: error.message, userId: req.user?.userId });
+    
     res.status(500).json({
       success: false,
       message: 'Server error'
