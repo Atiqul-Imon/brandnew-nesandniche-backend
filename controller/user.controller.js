@@ -186,13 +186,39 @@ export const getUserProfile = async (req, res) => {
 // @access  Private
 export const updateUserProfile = async (req, res) => {
   try {
-    const { name, language } = req.body;
+    const { 
+      name, 
+      username, 
+      email, 
+      bio, 
+      location, 
+      website, 
+      socialLinks, 
+      profileImage,
+      language 
+    } = req.body;
+    
     const updateData = {};
 
-    if (name) {
-      updateData.name = name;
+    // Basic fields
+    if (name !== undefined) updateData.name = name;
+    if (username !== undefined) updateData.username = username;
+    if (email !== undefined) updateData.email = email;
+    if (bio !== undefined) updateData.bio = bio;
+    if (location !== undefined) updateData.location = location;
+    if (website !== undefined) updateData.website = website;
+    if (profileImage !== undefined) updateData.profileImage = profileImage;
+    
+    // Social links
+    if (socialLinks) {
+      updateData.socialLinks = {
+        twitter: socialLinks.twitter || '',
+        linkedin: socialLinks.linkedin || '',
+        github: socialLinks.github || ''
+      };
     }
 
+    // Language validation
     if (language) {
       if (!['en', 'bn'].includes(language)) {
         return res.status(400).json({
@@ -201,6 +227,28 @@ export const updateUserProfile = async (req, res) => {
         });
       }
       updateData.language = language;
+    }
+
+    // Check if username is being changed and if it's already taken
+    if (username && username !== req.user.username) {
+      const existingUser = await User.findOne({ username });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Username is already taken'
+        });
+      }
+    }
+
+    // Check if email is being changed and if it's already taken
+    if (email && email !== req.user.email) {
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email is already taken'
+        });
+      }
     }
 
     const user = await User.findByIdAndUpdate(
@@ -226,6 +274,16 @@ export const updateUserProfile = async (req, res) => {
 
   } catch (error) {
     console.error('Update profile error:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: messages.join(', ')
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Server error'
