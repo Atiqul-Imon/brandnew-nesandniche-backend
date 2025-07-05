@@ -78,7 +78,20 @@ app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
   logger.info('Server started', { port: PORT, environment: process.env.NODE_ENV });
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ Port ${PORT} is already in use!`);
+    console.error('👉 Try one of the following:');
+    console.error('- Change the PORT in backend/.env to a free port (e.g. 5050)');
+    console.error('- Kill the process using this port:');
+    console.error(`    lsof -ti:${PORT} | xargs kill -9`);
+    process.exit(1);
+  } else {
+    throw err;
+  }
 });

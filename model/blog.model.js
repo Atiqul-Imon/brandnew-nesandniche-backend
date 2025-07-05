@@ -55,8 +55,6 @@ const blogSchema = new mongoose.Schema({
     en: {
       type: String,
       required: false,
-      unique: true,
-      sparse: true,
       lowercase: true,
       trim: true,
       match: [/^[a-z0-9-]+$/, 'English slug can only contain lowercase letters, numbers, and hyphens']
@@ -64,8 +62,6 @@ const blogSchema = new mongoose.Schema({
     bn: {
       type: String,
       required: false,
-      unique: true,
-      sparse: true,
       lowercase: true,
       trim: true,
       match: [/^[\u0980-\u09FFa-z0-9-]+$/, 'Bangla slug can only contain Bangla letters, English letters, numbers, and hyphens']

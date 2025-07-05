@@ -516,22 +516,37 @@ export const updateBlog = asyncHandler(async (req, res) => {
       req.body.author = authorData;
     }
 
-    // Check slug uniqueness if slug is being updated
+    // Handle slug updates - only validate if slug is actually changing
     if (req.body.slug) {
-      const orConditions = [];
-      if (req.body.slug.en) {
-        orConditions.push({ 'slug.en': req.body.slug.en });
+      const currentSlugs = blog.slug || { en: '', bn: '' };
+      const newSlugs = req.body.slug;
+      
+      // Only check uniqueness if the slug is actually different
+      if (newSlugs.en && newSlugs.en !== currentSlugs.en) {
+        const existingEnSlug = await Blog.findOne({ 
+          _id: { $ne: id }, 
+          'slug.en': newSlugs.en 
+        });
+        if (existingEnSlug) {
+          throw new ValidationError('English slug already exists');
+        }
       }
-      if (req.body.slug.bn) {
-        orConditions.push({ 'slug.bn': req.body.slug.bn });
+      
+      if (newSlugs.bn && newSlugs.bn !== currentSlugs.bn) {
+        const existingBnSlug = await Blog.findOne({ 
+          _id: { $ne: id }, 
+          'slug.bn': newSlugs.bn 
+        });
+        if (existingBnSlug) {
+          throw new ValidationError('Bangla slug already exists');
+        }
       }
-      const existingSlugs = orConditions.length > 0
-        ? await Blog.find({ _id: { $ne: id }, $or: orConditions })
-        : [];
-
-      if (existingSlugs.length > 0) {
-        throw new ValidationError('Slug already exists for one or both languages');
-      }
+      
+      // Keep the new slugs or existing ones if not provided
+      req.body.slug = {
+        en: newSlugs.en || currentSlugs.en,
+        bn: newSlugs.bn || currentSlugs.bn
+      };
     }
 
     // Calculate read time if content is updated
