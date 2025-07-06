@@ -14,7 +14,8 @@ import {
   getPopularBlogs,
   toggleBlogStatus,
   approveBlog,
-  rejectBlog
+  rejectBlog,
+  getBlogsByLanguage
 } from '../controller/blog.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { 
@@ -37,6 +38,7 @@ router.get('/popular', getPopularBlogs);
 router.get('/category/:categorySlug', getBlogsByCategory);
 router.get('/author/:authorId', getBlogsByAuthor);
 router.get('/:lang/slug/:slug', getBlogBySlug);
+router.get('/:lang', getBlogsByLanguage);
 router.get('/:slug', getBlogBySlug);
 
 // Protected routes - require editor or higher
