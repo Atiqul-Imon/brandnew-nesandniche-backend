@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Blog from '../model/blog.model.js';
 import User from '../model/user.model.js';
 import { asyncHandler, NotFoundError, AuthorizationError, ValidationError } from '../utils/errorHandler.js';
@@ -266,16 +267,10 @@ export const getBlogsByLanguage = asyncHandler(async (req, res) => {
 
     // Exclude specific blog
     if (exclude) {
-      try {
-        // Validate ObjectId format
-        const mongoose = await import('mongoose');
-        if (mongoose.Types.ObjectId.isValid(exclude)) {
-          query._id = { $ne: exclude };
-        } else {
-          console.warn('Invalid ObjectId format for exclude parameter:', exclude);
-        }
-      } catch (error) {
-        console.warn('Error validating exclude ObjectId:', error.message);
+      if (mongoose.Types.ObjectId.isValid(exclude)) {
+        query._id = { $ne: exclude };
+      } else {
+        console.warn('Invalid ObjectId format for exclude parameter:', exclude);
       }
     }
 
