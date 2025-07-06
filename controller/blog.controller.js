@@ -266,7 +266,17 @@ export const getBlogsByLanguage = asyncHandler(async (req, res) => {
 
     // Exclude specific blog
     if (exclude) {
-      query._id = { $ne: exclude };
+      try {
+        // Validate ObjectId format
+        const mongoose = await import('mongoose');
+        if (mongoose.Types.ObjectId.isValid(exclude)) {
+          query._id = { $ne: exclude };
+        } else {
+          console.warn('Invalid ObjectId format for exclude parameter:', exclude);
+        }
+      } catch (error) {
+        console.warn('Error validating exclude ObjectId:', error.message);
+      }
     }
 
     // Search filter
