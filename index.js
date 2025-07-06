@@ -15,13 +15,13 @@ import { errorHandler, notFound } from './utils/errorHandler.js';
 import logger from './utils/logger.js';
 
 // Debug: Check if environment variables are loaded
-console.log('🔍 Environment Variables Debug:');
-console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
-console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY);
-console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? '***SET***' : 'undefined');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('PORT:', process.env.PORT);
-console.log('---');
+// console.log('🔍 Environment Variables Debug:');
+// console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
+// console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY);
+// console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? '***SET***' : 'undefined');
+// console.log('NODE_ENV:', process.env.NODE_ENV);
+// console.log('PORT:', process.env.PORT);
+// console.log('---');
 
 // Initialize Express
 const app = express();

@@ -427,6 +427,8 @@ export const getBlogBySlug = asyncHandler(async (req, res) => {
     .select(`title.${lang} content.${lang} excerpt.${lang} slug.${lang} category.${lang} featuredImage publishedAt readTime.${lang} viewCount author tags.${lang} seoTitle.${lang} seoDescription.${lang} seoKeywords.${lang}`)
     .populate('author.user', 'name email');
 
+
+
     if (!blog) {
       throw new NotFoundError('Blog post not found');
     }
