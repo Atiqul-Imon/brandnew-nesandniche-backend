@@ -4,7 +4,8 @@ import {
   getCategory, 
   createCategory, 
   updateCategory, 
-  deleteCategory 
+  deleteCategory,
+  getAllCategoriesWithCount
 } from '../controller/category.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { requirePermission, requireRole } from '../middleware/permissions.middleware.js';
@@ -13,6 +14,7 @@ const router = express.Router();
 
 // Public routes
 router.get('/', getCategories);
+router.get('/all/:lang', getAllCategoriesWithCount);
 router.get('/:id', getCategory);
 
 // Protected routes

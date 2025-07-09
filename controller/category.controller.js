@@ -220,3 +220,64 @@ export const deleteCategory = asyncHandler(async (req, res) => {
     throw error;
   }
 }); 
+
+// @desc    Get all categories with blog counts
+// @route   GET /api/categories/all/:lang
+// @access  Public
+export const getAllCategoriesWithCount = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  const { lang } = req.params;
+
+  try {
+    if (!['en', 'bn'].includes(lang)) {
+      throw new ValidationError('Invalid language parameter. Use "en" or "bn"');
+    }
+
+    // Get all active categories
+    const categories = await Category.find({ isActive: true })
+      .sort({ sortOrder: 1, [`name.${lang}`]: 1 })
+      .select(`name.${lang} slug.${lang} description.${lang} color icon isActive sortOrder`);
+
+    // Get blog counts for each category
+    const Blog = (await import('../model/blog.model.js')).default;
+    const categoriesWithCounts = await Promise.all(
+      categories.map(async (category) => {
+        const postCount = await Blog.countDocuments({
+          status: 'published',
+          publishedAt: { $lte: new Date() },
+          [`category.${lang}`]: category.name[lang]
+        });
+
+        return {
+          name: category.name[lang],
+          slug: category.slug[lang],
+          postCount,
+          color: category.color,
+          icon: category.icon
+        };
+      })
+    );
+
+    // Sort by post count (descending) then by name
+    categoriesWithCounts.sort((a, b) => {
+      if (b.postCount !== a.postCount) {
+        return b.postCount - a.postCount;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'categories', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: { categories: categoriesWithCounts }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('find', 'categories', duration, false);
+    logger.error('All categories with count retrieval failed', { error: error.message, language: lang });
+    throw error;
+  }
+}); 

@@ -15,7 +15,8 @@ import {
   toggleBlogStatus,
   approveBlog,
   rejectBlog,
-  getBlogsByLanguage
+  getBlogsByLanguage,
+  getCategoriesWithCount
 } from '../controller/blog.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { 
@@ -37,6 +38,7 @@ router.get('/recent', getRecentBlogs);
 router.get('/popular', getPopularBlogs);
 router.get('/category/:categorySlug', getBlogsByCategory);
 router.get('/author/:authorId', getBlogsByAuthor);
+router.get('/:lang/categories', getCategoriesWithCount);
 router.get('/:lang/slug/:slug', getBlogBySlug);
 router.get('/:lang', getBlogsByLanguage);
 router.get('/:slug', getBlogBySlug);

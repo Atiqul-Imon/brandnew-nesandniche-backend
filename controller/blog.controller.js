@@ -262,7 +262,7 @@ export const getBlogsByLanguage = asyncHandler(async (req, res) => {
 
     // Category filter
     if (category) {
-      query[`category.${lang}`] = { $regex: category, $options: 'i' };
+      query[`category.${lang}`] = category;
     }
 
     // Exclude specific blog
@@ -956,6 +956,7 @@ export const getAllBlogs = asyncHandler(async (req, res) => {
       language = req.query.lang || req.query.language || 'en',
       category,
       author,
+      search,
       sort = 'publishedAt',
       order = 'desc'
     } = req.query;
@@ -979,6 +980,23 @@ export const getAllBlogs = asyncHandler(async (req, res) => {
       query[`category.${language}`] = { $exists: true, $ne: null, $ne: '' };
     }
     
+    // Search filter
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      query.$or = [
+        { [`title.${language}`]: searchRegex },
+        { [`content.${language}`]: searchRegex },
+        { [`excerpt.${language}`]: searchRegex },
+        { [`category.${language}`]: searchRegex },
+        { tags: { $in: [searchRegex] } }
+      ];
+    }
+    
+    // Category filter
+    if (category) {
+      query[`category.${language}`] = category;
+    }
+    
     // Author filter
     if (author) {
       query['author.user'] = author;
@@ -996,6 +1014,7 @@ export const getAllBlogs = asyncHandler(async (req, res) => {
       .populate('author.user', 'name username profileImage');
 
     const total = await Blog.countDocuments(query);
+    const hasMore = skip + blogs.length < total;
 
     const duration = Date.now() - startTime;
     logger.logDatabase('find', 'blogs', duration, true);
@@ -1004,6 +1023,8 @@ export const getAllBlogs = asyncHandler(async (req, res) => {
       success: true,
       data: {
         blogs,
+        total,
+        hasMore,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
