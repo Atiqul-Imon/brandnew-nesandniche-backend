@@ -1,5 +1,12 @@
 import express from 'express';
-import newsletterController from '../controller/newsletter.controller.js';
+import {
+  subscribe,
+  confirmSubscription,
+  unsubscribe,
+  resubscribe,
+  getSubscriptionStatus,
+  getNewsletterStats
+} from '../controller/newsletter.controller.js';
 import { rateLimit } from '../middleware/rateLimit.middleware.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { requireAdmin } from '../middleware/permissions.middleware.js';
@@ -24,17 +31,17 @@ const subscribeRateLimit = rateLimit({
 });
 
 // Public routes
-router.post('/subscribe', subscribeRateLimit, newsletterController.subscribe);
-router.get('/confirm/:token', newsletterController.confirmSubscription);
-router.get('/unsubscribe/:token', newsletterController.unsubscribe);
-router.get('/resubscribe/:token', newsletterController.resubscribe);
-router.get('/status', newsletterController.getSubscriptionStatus);
+router.post('/subscribe', subscribeRateLimit, subscribe);
+router.get('/confirm/:token', confirmSubscription);
+router.get('/unsubscribe/:token', unsubscribe);
+router.get('/resubscribe/:token', resubscribe);
+router.get('/status', getSubscriptionStatus);
 
 // Admin routes (protected)
 router.get('/stats', 
   protect, 
   requireAdmin, 
-  newsletterController.getNewsletterStats
+  getNewsletterStats
 );
 
 export default router; 
