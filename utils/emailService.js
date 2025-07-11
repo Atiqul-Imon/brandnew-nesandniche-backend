@@ -1,8 +1,8 @@
-const nodemailer = require('nodemailer');
-const { logger } = require('./logger');
+import nodemailer from 'nodemailer';
+import logger from './logger.js';
 
 const createTransporter = () => {
-  return nodemailer.createTransporter({
+  return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: process.env.SMTP_PORT,
     secure: process.env.SMTP_SECURE === 'true',
@@ -34,4 +34,4 @@ const sendEmail = async (emailContent) => {
   }
 };
 
-module.exports = { sendEmail }; 
+export { sendEmail }; 
