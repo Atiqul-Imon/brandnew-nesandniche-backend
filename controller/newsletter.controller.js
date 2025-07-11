@@ -1,6 +1,6 @@
-const Newsletter = require('../model/newsletter.model');
-const { logger } = require('../utils/logger');
-const { sendEmail } = require('../utils/emailService');
+import Newsletter from '../model/newsletter.model.js';
+import { logger } from '../utils/logger.js';
+import { sendEmail } from '../utils/emailService.js';
 
 // Subscribe to newsletter
 const subscribe = async (req, res) => {
@@ -330,7 +330,7 @@ const cleanExpiredTokens = async () => {
   }
 };
 
-module.exports = {
+export {
   subscribe,
   confirmSubscription,
   unsubscribe,
