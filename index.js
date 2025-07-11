@@ -11,6 +11,7 @@ import blogRoutes from './routes/blog.route.js';
 import uploadRoutes from './routes/upload.route.js';
 import categoryRoutes from './routes/category.route.js';
 import commentRoutes from './routes/comment.route.js';
+import newsletterRoutes from './routes/newsletter.route.js';
 import { errorHandler, notFound } from './utils/errorHandler.js';
 import logger from './utils/logger.js';
 import { 
@@ -63,6 +64,7 @@ app.use('/api/blogs', blogRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/comments', commentRoutes);
+app.use('/api/newsletter', newsletterRoutes);
 
 app.get('/', (req, res) => {
   res.send('API is running...');

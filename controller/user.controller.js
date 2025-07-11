@@ -649,3 +649,238 @@ export const toggleFollow = async (req, res) => {
     });
   }
 }; 
+
+// @desc    Change password
+// @route   PUT /api/users/change-password
+// @access  Private
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    // Validate input
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide current password and new password'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
+      });
+    }
+
+    // Get user with password
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await user.comparePassword(currentPassword);
+    if (!isCurrentPasswordValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+
+    // Update password
+    user.password = newPassword;
+    await user.save();
+
+    logger.logAuth('password_change', user._id, true, { email: user.email });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+
+  } catch (error) {
+    console.error('Change password error:', error);
+    logger.logAuth('password_change', req.user?.userId, false, { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Forgot password - send reset email
+// @route   POST /api/users/forgot-password
+// @access  Public
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide an email address'
+      });
+    }
+
+    // Find user
+    const user = await User.findOne({ email });
+    if (!user) {
+      // Don't reveal if user exists or not for security
+      return res.status(200).json({
+        success: true,
+        message: 'If an account with that email exists, a password reset link has been sent'
+      });
+    }
+
+    // Generate reset token
+    const resetToken = jwt.sign(
+      { userId: user._id, type: 'password_reset' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    // Save reset token to user
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+    await user.save();
+
+    // Send email
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    
+    const emailContent = {
+      to: user.email,
+      subject: 'Password Reset Request - News and Niche',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #1976d2;">Password Reset Request</h2>
+          <p>Hello ${user.name},</p>
+          <p>You requested a password reset for your News and Niche account.</p>
+          <p>Click the button below to reset your password:</p>
+          <a href="${resetUrl}" style="display: inline-block; background-color: #1976d2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0;">Reset Password</a>
+          <p>This link will expire in 1 hour.</p>
+          <p>If you didn't request this reset, please ignore this email.</p>
+          <p>Best regards,<br>The News and Niche Team</p>
+        </div>
+      `,
+      text: `
+        Password Reset Request
+        
+        Hello ${user.name},
+        
+        You requested a password reset for your News and Niche account.
+        
+        Click the link below to reset your password:
+        ${resetUrl}
+        
+        This link will expire in 1 hour.
+        
+        If you didn't request this reset, please ignore this email.
+        
+        Best regards,
+        The News and Niche Team
+      `
+    };
+
+    try {
+      const { sendEmail } = await import('../utils/emailService.js');
+      await sendEmail(emailContent);
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      // Don't fail the request if email fails
+    }
+
+    logger.logAuth('forgot_password', user._id, true, { email });
+
+    res.status(200).json({
+      success: true,
+      message: 'If an account with that email exists, a password reset link has been sent'
+    });
+
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    logger.logAuth('forgot_password', 'unknown', false, { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Reset password with token
+// @route   POST /api/users/reset-password
+// @access  Public
+export const resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide reset token and new password'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
+      });
+    }
+
+    // Verify token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (jwtError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset token'
+      });
+    }
+
+    if (decoded.type !== 'password_reset') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid token type'
+      });
+    }
+
+    // Find user with reset token
+    const user = await User.findOne({
+      _id: decoded.userId,
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset token'
+      });
+    }
+
+    // Update password and clear reset token
+    user.password = newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    logger.logAuth('password_reset', user._id, true, { email: user.email });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully'
+    });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    logger.logAuth('password_reset', 'unknown', false, { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+}; 

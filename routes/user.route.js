@@ -9,7 +9,10 @@ import {
   updateUserStatus,
   deleteUser,
   getUserProfileByUsername,
-  toggleFollow
+  toggleFollow,
+  changePassword,
+  forgotPassword,
+  resetPassword
 } from '../controller/user.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { 
@@ -29,11 +32,14 @@ const router = express.Router();
 // Public routes with rate limiting
 router.post('/register', registerLimiter, registerUser);
 router.post('/login', loginLimiter, loginUser);
+router.post('/forgot-password', authLimiter, forgotPassword);
+router.post('/reset-password', authLimiter, resetPassword);
 router.get('/profile/:username', authLimiter, getUserProfileByUsername);
 
 // Protected routes
 router.get('/profile', protect, getUserProfile);
 router.put('/profile', protect, updateUserProfile);
+router.put('/change-password', protect, changePassword);
 router.post('/:id/follow', protect, toggleFollow);
 
 // Admin/Moderator only routes
