@@ -1,4 +1,5 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import {
   subscribe,
   confirmSubscription,
@@ -7,7 +8,6 @@ import {
   getSubscriptionStatus,
   getNewsletterStats
 } from '../controller/newsletter.controller.js';
-import { rateLimit } from '../middleware/rateLimit.middleware.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { requireAdmin } from '../middleware/permissions.middleware.js';
 
