@@ -1,5 +1,5 @@
-const mongoose = require('mongoose');
-const crypto = require('crypto');
+import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 const newsletterSchema = new mongoose.Schema({
   email: {
@@ -245,4 +245,5 @@ newsletterSchema.statics.findForCampaign = function(options = {}) {
   return this.find(query).select('email name locale tags');
 };
 
-module.exports = mongoose.model('Newsletter', newsletterSchema); 
+const Newsletter = mongoose.model('Newsletter', newsletterSchema);
+export default Newsletter; 
