@@ -1,8 +1,9 @@
-const express = require('express');
+import express from 'express';
+import newsletterController from '../controller/newsletter.controller.js';
+import { rateLimit } from '../middleware/rateLimit.middleware.js';
+import { authenticate, authorize } from '../middleware/auth.middleware.js';
+
 const router = express.Router();
-const newsletterController = require('../controller/newsletter.controller');
-const { rateLimit } = require('../middleware/rateLimit.middleware');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
 
 // Rate limiting for newsletter endpoints
 const newsletterRateLimit = rateLimit({
