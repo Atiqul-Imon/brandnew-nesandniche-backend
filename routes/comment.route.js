@@ -9,6 +9,7 @@ import {
 } from '../controller/comment.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { requirePermission } from '../middleware/permissions.middleware.js';
+import { commentLimiter } from '../middleware/rateLimit.middleware.js';
 
 const router = express.Router();
 
@@ -16,10 +17,10 @@ const router = express.Router();
 router.get('/blog/:blogId', getBlogComments);
 
 // Protected routes
-router.post('/', protect, createComment);
-router.put('/:id', protect, updateComment);
-router.delete('/:id', protect, deleteComment);
-router.post('/:id/like', protect, toggleLike);
-router.post('/:id/dislike', protect, toggleDislike);
+router.post('/', protect, commentLimiter, createComment);
+router.put('/:id', protect, commentLimiter, updateComment);
+router.delete('/:id', protect, commentLimiter, deleteComment);
+router.post('/:id/like', protect, commentLimiter, toggleLike);
+router.post('/:id/dislike', protect, commentLimiter, toggleDislike);
 
 export default router; 

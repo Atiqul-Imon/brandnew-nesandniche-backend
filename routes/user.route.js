@@ -18,13 +18,18 @@ import {
   canManageUsers, 
   canManageRoles 
 } from '../middleware/permissions.middleware.js';
+import { 
+  loginLimiter, 
+  registerLimiter, 
+  authLimiter 
+} from '../middleware/rateLimit.middleware.js';
 
 const router = express.Router();
 
-// Public routes
-router.post('/register', registerUser);
-router.post('/login', loginUser);
-router.get('/profile/:username', getUserProfileByUsername);
+// Public routes with rate limiting
+router.post('/register', registerLimiter, registerUser);
+router.post('/login', loginLimiter, loginUser);
+router.get('/profile/:username', authLimiter, getUserProfileByUsername);
 
 // Protected routes
 router.get('/profile', protect, getUserProfile);

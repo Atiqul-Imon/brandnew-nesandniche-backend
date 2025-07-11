@@ -28,6 +28,10 @@ import {
 } from '../middleware/permissions.middleware.js';
 import upload from '../middleware/upload.middleware.js';
 import Blog from '../model/blog.model.js'; // Added import for Blog model
+import { 
+  blogActionLimiter, 
+  adminActionLimiter 
+} from '../middleware/rateLimit.middleware.js';
 
 const router = express.Router();
 
@@ -126,14 +130,14 @@ router.get('/:id/related', async (req, res) => {
 });
 
 // Protected routes - require editor or higher
-router.post('/', protect, requireEditor, upload.single('featuredImage'), createBlog);
+router.post('/', protect, requireEditor, blogActionLimiter, upload.single('featuredImage'), createBlog);
 router.get('/admin/:id', protect, requireEditor, getBlogById);
-router.put('/:id', protect, canManageResource('blog'), upload.single('featuredImage'), updateBlog);
-router.delete('/:id', protect, canManageResource('blog'), deleteBlog);
+router.put('/:id', protect, canManageResource('blog'), blogActionLimiter, upload.single('featuredImage'), updateBlog);
+router.delete('/:id', protect, canManageResource('blog'), blogActionLimiter, deleteBlog);
 
 // Admin/Moderator only routes
-router.put('/:id/status', protect, requireModerator, toggleBlogStatus);
-router.put('/:id/approve', protect, requireModerator, approveBlog);
-router.put('/:id/reject', protect, requireModerator, rejectBlog);
+router.put('/:id/status', protect, requireModerator, adminActionLimiter, toggleBlogStatus);
+router.put('/:id/approve', protect, requireModerator, adminActionLimiter, approveBlog);
+router.put('/:id/reject', protect, requireModerator, adminActionLimiter, rejectBlog);
 
 export default router; 

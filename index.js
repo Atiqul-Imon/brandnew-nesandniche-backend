@@ -13,6 +13,10 @@ import categoryRoutes from './routes/category.route.js';
 import commentRoutes from './routes/comment.route.js';
 import { errorHandler, notFound } from './utils/errorHandler.js';
 import logger from './utils/logger.js';
+import { 
+  generalLimiter, 
+  speedLimiter 
+} from './middleware/rateLimit.middleware.js';
 
 // Debug: Check if environment variables are loaded
 // console.log('🔍 Environment Variables Debug:');
@@ -48,6 +52,10 @@ app.use(logger.logRequest);
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
+
+// Apply rate limiting middleware
+app.use(generalLimiter);
+app.use(speedLimiter);
 
 // Routes
 app.use('/api/users', userRoutes);
