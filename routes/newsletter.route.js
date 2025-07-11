@@ -1,7 +1,8 @@
 import express from 'express';
 import newsletterController from '../controller/newsletter.controller.js';
 import { rateLimit } from '../middleware/rateLimit.middleware.js';
-import { protect, authorize } from '../middleware/auth.middleware.js';
+import { protect } from '../middleware/auth.middleware.js';
+import { requireAdmin } from '../middleware/permissions.middleware.js';
 
 const router = express.Router();
 
@@ -32,7 +33,7 @@ router.get('/status', newsletterController.getSubscriptionStatus);
 // Admin routes (protected)
 router.get('/stats', 
   protect, 
-  authorize(['admin']), 
+  requireAdmin, 
   newsletterController.getNewsletterStats
 );
 
