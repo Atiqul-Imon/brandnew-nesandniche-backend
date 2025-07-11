@@ -35,4 +35,4 @@ router.get('/stats',
   newsletterController.getNewsletterStats
 );
 
-module.exports = router; 
+export default router; 
