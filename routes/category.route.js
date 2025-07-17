@@ -5,7 +5,9 @@ import {
   createCategory, 
   updateCategory, 
   deleteCategory,
-  getAllCategoriesWithCount
+  getAllCategoriesWithCount,
+  getCategoriesWithCounts,
+  getCategoryHighlights
 } from '../controller/category.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { requirePermission, requireRole } from '../middleware/permissions.middleware.js';
@@ -15,6 +17,11 @@ const router = express.Router();
 // Public routes
 router.get('/', getCategories);
 router.get('/all/:lang', getAllCategoriesWithCount);
+
+// New homepage category routes
+router.get('/:lang/with-counts', getCategoriesWithCounts);
+router.get('/:lang/highlights', getCategoryHighlights);
+
 router.get('/:id', getCategory);
 
 // Protected routes

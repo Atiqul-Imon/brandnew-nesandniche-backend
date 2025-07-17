@@ -1110,35 +1110,179 @@ export const searchBlogs = asyncHandler(async (req, res) => {
   }
 });
 
-// @desc    Get blogs by category
-// @route   GET /api/blogs/category/:categorySlug
+// @desc    Get trending blog posts by language
+// @route   GET /api/blogs/:lang/trending
+// @access  Public
+export const getTrendingBlogs = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  const { lang } = req.params;
+  const { limit = 6, days = 30 } = req.query;
+
+  try {
+    if (!['en', 'bn'].includes(lang)) {
+      throw new ValidationError('Invalid language parameter. Use "en" or "bn"');
+    }
+
+    // Calculate date for trending window
+    const trendingDate = new Date();
+    trendingDate.setDate(trendingDate.getDate() - parseInt(days));
+
+    const blogs = await Blog.find({
+      status: 'published',
+      publishedAt: { $gte: trendingDate, $lte: new Date() },
+      [`title.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+      [`content.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+      [`excerpt.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+      [`slug.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+      [`category.${lang}`]: { $exists: true, $ne: null, $ne: '' }
+    })
+    .populate('author', 'name')
+    .sort({ viewCount: -1, publishedAt: -1 })
+    .limit(parseInt(limit))
+    .select(`title.${lang} content.${lang} excerpt.${lang} slug.${lang} category.${lang} featuredImage publishedAt readTime.${lang} viewCount author status isFeatured`);
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('read', 'blogs', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: { blogs }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('read', 'blogs', duration, false);
+    logger.error('Trending blogs retrieval failed', { error: error.message, language: lang });
+    throw error;
+  }
+});
+
+// @desc    Get blogs by category with enhanced data
+// @route   GET /api/blogs/:lang/category/:category
 // @access  Public
 export const getBlogsByCategory = asyncHandler(async (req, res) => {
   const startTime = Date.now();
-  
-  try {
-    const { categorySlug } = req.params;
-    const { 
-      page = 1, 
-      limit = 10, 
-      language = 'en',
-      status = 'published'
-    } = req.query;
+  const { lang, category } = req.params;
+  const { limit = 6, page = 1, sortBy = 'publishedAt', sortOrder = 'desc' } = req.query;
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+  try {
+    if (!['en', 'bn'].includes(lang)) {
+      throw new ValidationError('Invalid language parameter. Use "en" or "bn"');
+    }
+
     const query = {
-      status: status,
-      [`category.${language}`]: categorySlug
+      status: 'published',
+      publishedAt: { $lte: new Date() },
+      [`category.${lang}`]: category,
+      [`title.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+      [`content.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+      [`excerpt.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+      [`slug.${lang}`]: { $exists: true, $ne: null, $ne: '' }
     };
 
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
     const blogs = await Blog.find(query)
-      .sort({ publishedAt: -1 })
+      .populate('author', 'name')
+      .sort(sort)
       .skip(skip)
       .limit(parseInt(limit))
-      .populate('author.user', 'name username profileImage');
+      .select(`title.${lang} content.${lang} excerpt.${lang} slug.${lang} category.${lang} featuredImage publishedAt readTime.${lang} viewCount author status isFeatured`);
 
     const total = await Blog.countDocuments(query);
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('read', 'blogs', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        blogs,
+        total,
+        category,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(total / parseInt(limit)),
+          totalItems: total,
+          itemsPerPage: parseInt(limit)
+        }
+      }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('read', 'blogs', duration, false);
+    logger.error('Category blogs retrieval failed', { error: error.message, language: lang, category });
+    throw error;
+  }
+});
+
+// @desc    Get homepage data (featured, recent, popular posts)
+// @route   GET /api/blogs/:lang/homepage
+// @access  Public
+export const getHomepageData = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  const { lang } = req.params;
+  const { featuredLimit = 6, recentLimit = 9, popularLimit = 6 } = req.query;
+
+  try {
+    if (!['en', 'bn'].includes(lang)) {
+      throw new ValidationError('Invalid language parameter. Use "en" or "bn"');
+    }
+
+    // Language-specific filters
+    const langQuery = {
+      [`title.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+      [`excerpt.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+      [`slug.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+      [`category.${lang}`]: { $exists: true, $ne: null, $ne: '' }
+    };
+
+    // Get featured posts - EXCLUDE content field to save memory
+    const featuredQuery = {
+      ...langQuery,
+      status: 'published',
+      publishedAt: { $lte: new Date() },
+      isFeatured: true
+    };
+
+    const featuredBlogs = await Blog.find(featuredQuery)
+      .populate('author', 'name')
+      .sort({ publishedAt: -1 })
+      .limit(parseInt(featuredLimit))
+      .select(`title.${lang} excerpt.${lang} slug.${lang} category.${lang} featuredImage publishedAt readTime.${lang} viewCount author status isFeatured`);
+
+    // Get recent posts (excluding featured posts) - EXCLUDE content field
+    const recentQuery = {
+      ...langQuery,
+      status: 'published',
+      publishedAt: { $lte: new Date() },
+      isFeatured: { $ne: true } // Exclude featured posts
+    };
+
+    const recentBlogs = await Blog.find(recentQuery)
+      .populate('author', 'name')
+      .sort({ publishedAt: -1 })
+      .limit(parseInt(recentLimit))
+      .select(`title.${lang} excerpt.${lang} slug.${lang} category.${lang} featuredImage publishedAt readTime.${lang} viewCount author status isFeatured`);
+
+    // Get popular posts (excluding featured posts, sorted by viewCount) - EXCLUDE content field
+    const popularQuery = {
+      ...langQuery,
+      status: 'published',
+      publishedAt: { $lte: new Date() },
+      isFeatured: { $ne: true }, // Exclude featured posts
+      viewCount: { $gt: 0 } // Only posts with views
+    };
+
+    const popularBlogs = await Blog.find(popularQuery)
+      .populate('author', 'name')
+      .sort({ viewCount: -1, publishedAt: -1 })
+      .limit(parseInt(popularLimit))
+      .select(`title.${lang} excerpt.${lang} slug.${lang} category.${lang} featuredImage publishedAt readTime.${lang} viewCount author status isFeatured`);
 
     const duration = Date.now() - startTime;
     logger.logDatabase('find', 'blogs', duration, true);
@@ -1146,23 +1290,85 @@ export const getBlogsByCategory = asyncHandler(async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        blogs,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / parseInt(limit))
-        }
+        featured: featuredBlogs,
+        recent: recentBlogs,
+        popular: popularBlogs
       }
     });
 
   } catch (error) {
     const duration = Date.now() - startTime;
     logger.logDatabase('find', 'blogs', duration, false);
-    logger.error('Category blogs retrieval failed', { error: error.message });
+    logger.error('Homepage data retrieval failed', { error: error.message, language: lang });
     throw error;
   }
 });
+
+// Helper function to get category highlights
+async function getCategoryHighlights(lang) {
+  try {
+    // Get top categories by post count
+    const topCategories = await Blog.aggregate([
+      {
+        $match: {
+          status: 'published',
+          publishedAt: { $lte: new Date() },
+          [`title.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`category.${lang}`]: { $exists: true, $ne: null, $ne: '' }
+        }
+      },
+      {
+        $group: {
+          _id: `$category.${lang}`,
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      },
+      {
+        $limit: 6
+      }
+    ]);
+
+    const categoryHighlights = [];
+
+    for (const categoryData of topCategories) {
+      const categoryName = categoryData._id;
+      
+      // Get recent posts for this category
+      const categoryBlogs = await Blog.find({
+        status: 'published',
+        publishedAt: { $lte: new Date() },
+        [`category.${lang}`]: categoryName,
+        [`title.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+        [`content.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+        [`excerpt.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+        [`slug.${lang}`]: { $exists: true, $ne: null, $ne: '' }
+      })
+      .populate('author', 'name')
+      .sort({ publishedAt: -1 })
+      .limit(3)
+      .select(`title.${lang} content.${lang} excerpt.${lang} slug.${lang} category.${lang} featuredImage publishedAt readTime.${lang} viewCount author status isFeatured`);
+
+      if (categoryBlogs.length > 0) {
+        categoryHighlights.push({
+          category: {
+            _id: categoryName,
+            name: { [lang]: categoryName },
+            slug: { [lang]: categoryName.toLowerCase().replace(/\s+/g, '-') }
+          },
+          blogs: categoryBlogs
+        });
+      }
+    }
+
+    return categoryHighlights;
+  } catch (error) {
+    logger.error('Category highlights retrieval failed', { error: error.message, language: lang });
+    return [];
+  }
+}
 
 // @desc    Get blogs by author
 // @route   GET /api/blogs/author/:authorId
@@ -1228,6 +1434,7 @@ export const getRecentBlogs = asyncHandler(async (req, res) => {
     
     const query = {
       status: 'published',
+      isFeatured: { $ne: true }, // Exclude featured posts from recent
       [`title.${language}`]: { $exists: true, $ne: null }
     };
 
@@ -1280,6 +1487,7 @@ export const getPopularBlogs = asyncHandler(async (req, res) => {
     
     const query = {
       status: 'published',
+      isFeatured: { $ne: true }, // Exclude featured posts from popular
       publishedAt: { $gte: startDate },
       [`title.${language}`]: { $exists: true, $ne: null }
     };

@@ -31,6 +31,10 @@ import {
 // Initialize Express
 const app = express();
 
+// Memory optimization settings
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+
 // Connect to MongoDB Atlas
 connectDB();
 
@@ -44,8 +48,17 @@ app.use(cors({
   ],
   credentials: true
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Optimize JSON parsing with smaller limits
+app.use(express.json({ 
+  limit: '5mb', // Reduced from 10mb
+  strict: true 
+}));
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '5mb', // Reduced from 10mb
+  parameterLimit: 1000 // Limit number of parameters
+}));
 
 // Request logging
 app.use(logger.logRequest);
@@ -76,7 +89,8 @@ app.get('/health', (req, res) => {
     success: true,
     message: 'Server is healthy',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    memory: process.memoryUsage()
   });
 });
 
@@ -93,6 +107,22 @@ const server = app.listen(PORT, () => {
   logger.info('Server started', { port: PORT, environment: process.env.NODE_ENV });
 });
 
+// Memory monitoring
+setInterval(() => {
+  const memUsage = process.memoryUsage();
+  const memUsageMB = {
+    rss: Math.round(memUsage.rss / 1024 / 1024),
+    heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+    heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+    external: Math.round(memUsage.external / 1024 / 1024)
+  };
+  
+  // Log memory usage every 5 minutes
+  if (memUsageMB.heapUsed > 100) { // Alert if heap usage > 100MB
+    logger.warn('High memory usage detected', memUsageMB);
+  }
+}, 5 * 60 * 1000); // Check every 5 minutes
+
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`\n❌ Port ${PORT} is already in use!`);
@@ -104,4 +134,21 @@ server.on('error', (err) => {
   } else {
     throw err;
   }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Process terminated');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  server.close(() => {
+    console.log('Process terminated');
+    process.exit(0);
+  });
 });

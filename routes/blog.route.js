@@ -16,7 +16,9 @@ import {
   approveBlog,
   rejectBlog,
   getBlogsByLanguage,
-  getCategoriesWithCount
+  getCategoriesWithCount,
+  getTrendingBlogs,
+  getHomepageData
 } from '../controller/blog.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { 
@@ -38,10 +40,16 @@ const router = express.Router();
 // Public routes
 router.get('/', getAllBlogs);
 router.get('/search', searchBlogs);
-router.get('/featured', getFeaturedBlogs);
 router.get('/recent', getRecentBlogs);
 router.get('/popular', getPopularBlogs);
 router.get('/category/:categorySlug', getBlogsByCategory);
+
+// New homepage and trending routes
+router.get('/:lang/homepage', getHomepageData);
+router.get('/:lang/trending', getTrendingBlogs);
+router.get('/:lang/featured', getFeaturedBlogs);
+router.get('/:lang/category/:category', getBlogsByCategory);
+
 router.get('/author/:authorId', getBlogsByAuthor);
 router.get('/:lang/categories', getCategoriesWithCount);
 router.get('/:lang/slug/:slug', getBlogBySlug);

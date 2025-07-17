@@ -281,3 +281,161 @@ export const getAllCategoriesWithCount = asyncHandler(async (req, res) => {
     throw error;
   }
 }); 
+
+// @desc    Get categories with blog counts for homepage
+// @route   GET /api/categories/:lang/with-counts
+// @access  Public
+export const getCategoriesWithCounts = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  const { lang } = req.params;
+  const { limit = 8 } = req.query;
+
+  try {
+    if (!['en', 'bn'].includes(lang)) {
+      throw new ValidationError('Invalid language parameter. Use "en" or "bn"');
+    }
+
+    // Get active categories
+    const categories = await Category.find({ isActive: true })
+      .sort({ sortOrder: 1, [`name.${lang}`]: 1 })
+      .limit(parseInt(limit))
+      .select(`name.${lang} slug.${lang} description.${lang} color icon isActive sortOrder`);
+
+    // Import Blog model for counting
+    const Blog = (await import('../model/blog.model.js')).default;
+
+    // Get blog counts for each category
+    const categoriesWithCounts = await Promise.all(
+      categories.map(async (category) => {
+        const blogCount = await Blog.countDocuments({
+          status: 'published',
+          publishedAt: { $lte: new Date() },
+          [`category.${lang}`]: category.name[lang],
+          [`title.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`content.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`excerpt.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`slug.${lang}`]: { $exists: true, $ne: null, $ne: '' }
+        });
+
+        return {
+          ...category.toObject(),
+          blogCount
+        };
+      })
+    );
+
+    // Filter out categories with 0 blogs and sort by blog count
+    const activeCategories = categoriesWithCounts
+      .filter(cat => cat.blogCount > 0)
+      .sort((a, b) => b.blogCount - a.blogCount);
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('read', 'categories', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: { categories: activeCategories }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('read', 'categories', duration, false);
+    logger.error('Categories with counts retrieval failed', { error: error.message, language: lang });
+    throw error;
+  }
+});
+
+// @desc    Get category highlights with sample posts
+// @route   GET /api/categories/:lang/highlights
+// @access  Public
+export const getCategoryHighlights = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  const { lang } = req.params;
+  const { limit = 4, postsPerCategory = 3 } = req.query;
+
+  try {
+    if (!['en', 'bn'].includes(lang)) {
+      throw new ValidationError('Invalid language parameter. Use "en" or "bn"');
+    }
+
+    // Get top categories by blog count
+    const Blog = (await import('../model/blog.model.js')).default;
+
+    // Aggregate to get categories with blog counts
+    const categoryStats = await Blog.aggregate([
+      {
+        $match: {
+          status: 'published',
+          publishedAt: { $lte: new Date() },
+          [`title.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`content.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`excerpt.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`slug.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`category.${lang}`]: { $exists: true, $ne: null, $ne: '' }
+        }
+      },
+      {
+        $group: {
+          _id: `$category.${lang}`,
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      },
+      {
+        $limit: parseInt(limit)
+      }
+    ]);
+
+    // Get category details and sample posts
+    const highlights = await Promise.all(
+      categoryStats.map(async (stat) => {
+        const category = await Category.findOne({
+          isActive: true,
+          [`name.${lang}`]: stat._id
+        }).select(`name.${lang} slug.${lang} description.${lang} color icon`);
+
+        if (!category) return null;
+
+        // Get sample posts for this category
+        const posts = await Blog.find({
+          status: 'published',
+          publishedAt: { $lte: new Date() },
+          [`category.${lang}`]: stat._id,
+          [`title.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`content.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`excerpt.${lang}`]: { $exists: true, $ne: null, $ne: '' },
+          [`slug.${lang}`]: { $exists: true, $ne: null, $ne: '' }
+        })
+        .populate('author', 'name')
+        .sort({ publishedAt: -1 })
+        .limit(parseInt(postsPerCategory))
+        .select(`title.${lang} content.${lang} excerpt.${lang} slug.${lang} category.${lang} featuredImage publishedAt readTime.${lang} viewCount author`);
+
+        return {
+          category: category.toObject(),
+          posts,
+          totalPosts: stat.count
+        };
+      })
+    );
+
+    // Filter out null results
+    const validHighlights = highlights.filter(h => h !== null);
+
+    const duration = Date.now() - startTime;
+    logger.logDatabase('read', 'categories', duration, true);
+
+    res.status(200).json({
+      success: true,
+      data: { highlights: validHighlights }
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.logDatabase('read', 'categories', duration, false);
+    logger.error('Category highlights retrieval failed', { error: error.message, language: lang });
+    throw error;
+  }
+}); 
