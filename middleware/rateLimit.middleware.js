@@ -4,7 +4,7 @@ import slowDown from 'express-slow-down';
 // General API rate limiter - protects all endpoints
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // limit each IP to 200 requests per windowMs
+  max: 500, // limit each IP to 500 requests per windowMs
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again later.'
@@ -118,8 +118,8 @@ export const uploadLimiter = rateLimit({
 // Speed limiter - slows down requests after certain threshold
 export const speedLimiter = slowDown({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  delayAfter: 50, // allow 50 requests per 15 minutes, then...
-  delayMs: () => 500 // begin adding 500ms of delay per request above 50
+  delayAfter: 100, // allow 100 requests per 15 minutes, then...
+  delayMs: () => 500 // begin adding 500ms of delay per request above 100
 });
 
 // Admin action rate limiter
