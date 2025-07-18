@@ -942,6 +942,37 @@ export const toggleBlogStatus = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Toggle blog featured status (Moderator/Admin only)
+// @route   PUT /api/blogs/:id/featured
+// @access  Private (Moderator/Admin)
+export const toggleBlogFeatured = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  const blog = await Blog.findById(id);
+  if (!blog) {
+    throw new NotFoundError('Blog not found');
+  }
+
+  const oldFeaturedStatus = blog.isFeatured;
+  blog.isFeatured = !blog.isFeatured;
+  
+  await blog.save();
+
+  logger.info('Blog featured status changed', { 
+    blogId: blog._id, 
+    changedBy: req.user.userId,
+    oldFeaturedStatus,
+    newFeaturedStatus: blog.isFeatured,
+    title: blog.title?.en || blog.title?.bn 
+  });
+
+  res.status(200).json({
+    success: true,
+    message: `Blog featured status changed from ${oldFeaturedStatus} to ${blog.isFeatured}`,
+    data: { blog }
+  });
+});
+
 // @desc    Get all blogs with filtering and pagination
 // @route   GET /api/blogs
 // @access  Public

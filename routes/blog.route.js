@@ -13,6 +13,7 @@ import {
   getRecentBlogs,
   getPopularBlogs,
   toggleBlogStatus,
+  toggleBlogFeatured,
   approveBlog,
   rejectBlog,
   getBlogsByLanguage,
@@ -145,6 +146,7 @@ router.delete('/:id', protect, canManageResource('blog'), blogActionLimiter, del
 
 // Admin/Moderator only routes
 router.put('/:id/status', protect, requireModerator, adminActionLimiter, toggleBlogStatus);
+router.put('/:id/featured', protect, requireModerator, adminActionLimiter, toggleBlogFeatured);
 router.put('/:id/approve', protect, requireModerator, adminActionLimiter, approveBlog);
 router.put('/:id/reject', protect, requireModerator, adminActionLimiter, rejectBlog);
 
