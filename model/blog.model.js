@@ -198,6 +198,74 @@ const blogSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // Sponsored Post & Guest Post Fields
+  postType: {
+    type: String,
+    enum: ['regular', 'guest', 'sponsored'],
+    default: 'regular'
+  },
+  guestAuthor: {
+    name: { type: String, required: false },
+    email: { type: String, required: false },
+    bio: { type: String, required: false },
+    website: { type: String, required: false },
+    company: { type: String, required: false },
+    social: {
+      twitter: String,
+      linkedin: String,
+      github: String
+    },
+    isVerified: { type: Boolean, default: false }
+  },
+  sponsorship: {
+    sponsor: { type: String, required: false },
+    sponsorEmail: { type: String, required: false },
+    sponsorWebsite: { type: String, required: false },
+    sponsorLogo: { type: String, required: false },
+    sponsorIndustry: { type: String, required: false },
+    isDisclosed: { type: Boolean, default: true },
+    disclosureText: {
+      en: { type: String, required: false },
+      bn: { type: String, required: false }
+    },
+    sponsoredAt: { type: Date, default: null },
+    sponsorshipDuration: {
+      type: String,
+      enum: ['1_day', '3_days', '1_week', '2_weeks', '1_month'],
+      default: '1_week'
+    },
+    placement: {
+      type: String,
+      enum: ['homepage', 'category_page', 'sidebar', 'newsletter'],
+      default: 'category_page'
+    }
+  },
+  submission: {
+    submittedAt: { type: Date, default: null },
+    submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    submissionNotes: { type: String, required: false },
+    reviewStatus: {
+      type: String,
+      enum: ['pending', 'under_review', 'approved', 'rejected', 'needs_revision'],
+      default: 'pending'
+    },
+    reviewerNotes: { type: String, required: false },
+    clientEmail: { type: String, required: false },
+    clientPhone: { type: String, required: false }
+  },
+  // SEO Safety Fields
+  seoSafety: {
+    isSponsored: { type: Boolean, default: false },
+    hasDisclosure: { type: Boolean, default: true },
+    disclosurePosition: {
+      type: String,
+      enum: ['top', 'bottom', 'both'],
+      default: 'both'
+    },
+    nofollowLinks: { type: Boolean, default: false },
+    competitorLinks: { type: Boolean, default: false },
+    qualityScore: { type: Number, min: 1, max: 10, default: 8 }
+  }
 }, {
   timestamps: true
 });
@@ -220,6 +288,11 @@ blogSchema.index({ author: 1 });
 blogSchema.index({ 'category.en': 1 });
 blogSchema.index({ 'category.bn': 1 });
 blogSchema.index({ isFeatured: 1, publishedAt: -1 });
+// New indexes for sponsored posts and guest posts
+blogSchema.index({ postType: 1, status: 1 });
+blogSchema.index({ 'sponsorship.sponsor': 1 });
+blogSchema.index({ 'submission.reviewStatus': 1 });
+blogSchema.index({ 'seoSafety.isSponsored': 1, publishedAt: -1 });
 
 // Virtual for formatted published date
 blogSchema.virtual('formattedPublishedAt').get(function() {
@@ -275,6 +348,42 @@ blogSchema.statics.getFeaturedByLanguage = function(language, limit = 5) {
     [`category.${language}`]: { $exists: true, $ne: null, $ne: '' }
   })
   .select(`title.${language} content.${language} excerpt.${language} slug.${language} category.${language} featuredImage publishedAt readTime.${language} viewCount author`)
+  .populate('author', 'name')
+  .sort({ publishedAt: -1 })
+  .limit(limit);
+};
+
+// Static method to get sponsored posts by language
+blogSchema.statics.getSponsoredByLanguage = function(language, limit = 10) {
+  return this.find({
+    status: 'published',
+    postType: 'sponsored',
+    publishedAt: { $lte: new Date() },
+    [`title.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`content.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`excerpt.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`slug.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`category.${language}`]: { $exists: true, $ne: null, $ne: '' }
+  })
+  .select(`title.${language} content.${language} excerpt.${language} slug.${language} category.${language} featuredImage publishedAt readTime.${language} viewCount author sponsorship`)
+  .populate('author', 'name')
+  .sort({ publishedAt: -1 })
+  .limit(limit);
+};
+
+// Static method to get guest posts by language
+blogSchema.statics.getGuestPostsByLanguage = function(language, limit = 10) {
+  return this.find({
+    status: 'published',
+    postType: 'guest',
+    publishedAt: { $lte: new Date() },
+    [`title.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`content.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`excerpt.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`slug.${language}`]: { $exists: true, $ne: null, $ne: '' },
+    [`category.${language}`]: { $exists: true, $ne: null, $ne: '' }
+  })
+  .select(`title.${language} content.${language} excerpt.${language} slug.${language} category.${language} featuredImage publishedAt readTime.${language} viewCount author guestAuthor`)
   .populate('author', 'name')
   .sort({ publishedAt: -1 })
   .limit(limit);
