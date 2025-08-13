@@ -163,6 +163,24 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   }
+  ,
+  // OTP-based password reset fields
+  resetPasswordOTPHash: {
+    type: String,
+    default: null
+  },
+  resetPasswordOTPExpires: {
+    type: Date,
+    default: null
+  },
+  resetPasswordOTPTryCount: {
+    type: Number,
+    default: 0
+  },
+  lastResetOTPAt: {
+    type: Date,
+    default: null
+  }
 }, {
   timestamps: true
 });

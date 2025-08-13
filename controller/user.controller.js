@@ -735,16 +735,22 @@ export const forgotPassword = async (req, res) => {
       });
     }
 
-    // Generate reset token
+    // Generate reset token (link) and OTP code
     const resetToken = jwt.sign(
       { userId: user._id, type: 'password_reset' },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit
+    const otpHash = await bcrypt.hash(otpCode, 12);
 
-    // Save reset token to user
+    // Save token and OTP to user
     user.resetPasswordToken = resetToken;
     user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+    user.resetPasswordOTPHash = otpHash;
+    user.resetPasswordOTPExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    user.resetPasswordOTPTryCount = 0;
+    user.lastResetOTPAt = new Date();
     await user.save();
 
     // Send email
@@ -763,6 +769,8 @@ export const forgotPassword = async (req, res) => {
           <p>This link will expire in 1 hour.</p>
           <p>If you didn't request this reset, please ignore this email.</p>
           <p>Best regards,<br>The News and Niche Team</p>
+          <p>Your one-time code (valid for 10 minutes): <strong style="font-size:18px; letter-spacing:2px;">${otpCode}</strong></p>
+          <p>Alternatively, you can reset via the link above if you prefer.</p>
         </div>
       `,
       text: `
@@ -772,8 +780,10 @@ export const forgotPassword = async (req, res) => {
         
         You requested a password reset for your News and Niche account.
         
-        Click the link below to reset your password:
+        Click the link below to reset your password, or use the one-time code below:
         ${resetUrl}
+        
+        OTP Code (valid 10 minutes): ${otpCode}
         
         This link will expire in 1 hour.
         
@@ -814,73 +824,82 @@ export const forgotPassword = async (req, res) => {
 // @access  Public
 export const resetPassword = async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
+    const { token, newPassword, email, otp } = req.body;
 
-    if (!token || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide reset token and new password'
-      });
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters long' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'New password must be at least 6 characters long'
+    // Path A: Token-based reset
+    if (token) {
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET);
+      } catch (jwtError) {
+        return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
+      }
+
+      if (decoded.type !== 'password_reset') {
+        return res.status(400).json({ success: false, message: 'Invalid token type' });
+      }
+
+      const user = await User.findOne({
+        _id: decoded.userId,
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: Date.now() }
       });
+
+      if (!user) {
+        return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
+      }
+
+      user.password = newPassword;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      user.resetPasswordOTPHash = undefined;
+      user.resetPasswordOTPExpires = undefined;
+      user.resetPasswordOTPTryCount = 0;
+      await user.save();
+
+      logger.logAuth('password_reset', user._id, true, { email: user.email, method: 'token' });
+      return res.status(200).json({ success: true, message: 'Password reset successfully' });
     }
 
-    // Verify token
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (jwtError) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid or expired reset token'
-      });
+    // Path B: OTP-based reset
+    if (email && otp) {
+      const user = await User.findOne({ email });
+      if (!user || !user.resetPasswordOTPHash || !user.resetPasswordOTPExpires) {
+        return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+      }
+      if (user.resetPasswordOTPTryCount >= 5) {
+        return res.status(429).json({ success: false, message: 'Too many attempts. Please request a new code.' });
+      }
+      if (user.resetPasswordOTPExpires < new Date()) {
+        return res.status(400).json({ success: false, message: 'OTP expired. Please request a new code.' });
+      }
+      const ok = await bcrypt.compare(otp, user.resetPasswordOTPHash);
+      user.resetPasswordOTPTryCount += 1;
+      if (!ok) {
+        await user.save();
+        return res.status(400).json({ success: false, message: 'Invalid OTP' });
+      }
+
+      user.password = newPassword;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      user.resetPasswordOTPHash = undefined;
+      user.resetPasswordOTPExpires = undefined;
+      user.resetPasswordOTPTryCount = 0;
+      await user.save();
+
+      logger.logAuth('password_reset', user._id, true, { email: user.email, method: 'otp' });
+      return res.status(200).json({ success: true, message: 'Password reset successfully' });
     }
 
-    if (decoded.type !== 'password_reset') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid token type'
-      });
-    }
-
-    // Find user with reset token
-    const user = await User.findOne({
-      _id: decoded.userId,
-      resetPasswordToken: token,
-      resetPasswordExpires: { $gt: Date.now() }
-    });
-
-    if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid or expired reset token'
-      });
-    }
-
-    // Update password and clear reset token
-    user.password = newPassword;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
-    await user.save();
-
-    logger.logAuth('password_reset', user._id, true, { email: user.email });
-
-    res.status(200).json({
-      success: true,
-      message: 'Password reset successfully'
-    });
-
+    return res.status(400).json({ success: false, message: 'Provide reset token or email+otp' });
   } catch (error) {
     console.error('Reset password error:', error);
     logger.logAuth('password_reset', 'unknown', false, { error: error.message });
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
-}; 
+};
